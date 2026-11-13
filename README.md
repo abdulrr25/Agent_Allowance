@@ -173,6 +173,29 @@ first run and needs network access. `cd contract && cargo test` is the command
 the README promises, so it must never depend on a download — it stays at well
 under a second with no extra dependencies.
 
+CI runs formatting, `clippy -D warnings`, the unit tests and the wasm build on
+every push, plus `verify.py` against the live deployment. The sandbox tests are
+deliberately left out of CI: they depend on a node-binary download, and a
+flaky red badge on a security project is worse than no badge.
+
+## Cost
+
+Measured on testnet, including the transfer and callback:
+
+| Operation | Gas | Fee |
+|---|---|---|
+| Allowed spend (policy check + transfer + callback) | 5.52 Tgas | 0.00048 NEAR |
+| Denied attempt | 2.60 Tgas | 0.00024 NEAR |
+
+There is a second-order guarantee hiding in that second row. A FunctionCall
+key's allowance pays for gas, and the agent's key is created with 0.25 NEAR.
+At roughly 0.00024 NEAR per rejected attempt, a compromised agent gets on the
+order of a thousand tries before its key is permanently exhausted and stops
+working — without anyone intervening.
+
+So the protocol bounds not just what an attacker can take, but how many times
+they can ask.
+
 The dashboard is one HTML file — no build step, no package manager. It reads
 live contract state and shows vault balance, each agent's policy, remaining
 daily headroom, and running allowed/blocked counts.
@@ -230,6 +253,12 @@ Stated plainly, because a security tool that overclaims is worse than none:
   threat model.
 - **It does not make prompt injection stop working.** It makes a successful
   injection boring.
+- **It governs native NEAR only.** Agents paying for real services will mostly
+  spend stablecoins, and NEP-141 tokens move by calling the token contract
+  rather than by a native transfer. Extending to them means accepting tokens
+  via `ft_on_transfer`, holding per-token caps, and paying out with
+  `ft_transfer_call` plus a callback — the same policy engine, a wider surface.
+  That is the obvious next step and it is not built here.
 - **It is unaudited.** A hackathon build on testnet. Do not put real funds
   behind it without review.
 
@@ -264,6 +293,7 @@ integration-tests/            7 sandbox tests covering the settlement path
 scripts/verify.py             on-chain verification, stdlib only
 scripts/reproduce-demo.sh     recreate the whole demo on testnet
 web/index.html                dashboard, no build step
+.github/workflows/ci.yml      fmt, clippy, tests, wasm, on-chain verify
 ```
 
 Rust · near-sdk 5.30.1 · NEAR testnet · NEP-297 events

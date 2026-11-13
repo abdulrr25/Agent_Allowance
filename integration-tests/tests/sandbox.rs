@@ -13,8 +13,7 @@ use near_workspaces::types::NearToken;
 use near_workspaces::{Account, Contract};
 use serde_json::json;
 
-const WASM: &str =
-    "../contract/target/wasm32-unknown-unknown/release/agent_allowance.wasm";
+const WASM: &str = "../contract/target/wasm32-unknown-unknown/release/agent_allowance.wasm";
 
 fn one_yocto() -> NearToken {
     NearToken::from_yoctonear(1)
@@ -57,7 +56,10 @@ async fn setup() -> anyhow::Result<Fixture> {
         .await?
         .into_result()?;
 
-    owner.transfer_near(vault.id(), NearToken::from_near(10)).await?.into_result()?;
+    owner
+        .transfer_near(vault.id(), NearToken::from_near(10))
+        .await?
+        .into_result()?;
 
     owner
         .call(vault.id(), "add_agent")
@@ -73,7 +75,12 @@ async fn setup() -> anyhow::Result<Fixture> {
         .await?
         .into_result()?;
 
-    Ok(Fixture { vault, owner, agent, payee })
+    Ok(Fixture {
+        vault,
+        owner,
+        agent,
+        payee,
+    })
 }
 
 /// Call `request_spend` and normalise the two shapes it can return.
@@ -128,7 +135,7 @@ async fn allowed_spend_actually_transfers_value() -> anyhow::Result<()> {
     let f = setup().await?;
     let before = f.payee.view_account().await?.balance;
 
-    let res = spend(&f, &f.payee.id().to_string(), NearToken::from_millinear(500)).await?;
+    let res = spend(&f, f.payee.id().as_str(), NearToken::from_millinear(500)).await?;
     assert_eq!(res["allowed"], json!(true));
 
     let after = f.payee.view_account().await?.balance;
@@ -140,7 +147,10 @@ async fn allowed_spend_actually_transfers_value() -> anyhow::Result<()> {
 
     let p = policy(&f).await?;
     assert_eq!(p["allowed_count"], json!(1));
-    assert_eq!(yocto(&p["lifetime_spent"]), NearToken::from_millinear(500).as_yoctonear());
+    assert_eq!(
+        yocto(&p["lifetime_spent"]),
+        NearToken::from_millinear(500).as_yoctonear()
+    );
     Ok(())
 }
 
@@ -164,7 +174,11 @@ async fn denied_spend_moves_no_value_and_is_recorded() -> anyhow::Result<()> {
 
     let p = policy(&f).await?;
     assert_eq!(p["denied_count"], json!(1), "denial must be recorded");
-    assert_eq!(yocto(&p["lifetime_spent"]), 0, "no value may move on a denial");
+    assert_eq!(
+        yocto(&p["lifetime_spent"]),
+        0,
+        "no value may move on a denial"
+    );
     Ok(())
 }
 
@@ -180,20 +194,30 @@ async fn failed_transfer_refunds_headroom() -> anyhow::Result<()> {
     let res = spend(&f, "ghost.nonexistent", NearToken::from_millinear(900)).await?;
     assert_eq!(res["allowed"], json!(true), "policy permits it");
     assert_eq!(
-        res["settled"], json!(false),
+        res["settled"],
+        json!(false),
         "the transfer itself must fail, so the callback reports failure"
     );
 
     let p = policy(&f).await?;
     assert_eq!(
-        yocto(&p["spent_in_window"]), 0,
+        yocto(&p["spent_in_window"]),
+        0,
         "a failed transfer must restore the daily headroom"
     );
-    assert_eq!(yocto(&p["lifetime_spent"]), 0, "lifetime spend must be restored too");
+    assert_eq!(
+        yocto(&p["lifetime_spent"]),
+        0,
+        "lifetime spend must be restored too"
+    );
 
     // And the agent can still spend its full allowance afterwards.
-    let again = spend(&f, &f.payee.id().to_string(), NearToken::from_near(1)).await?;
-    assert_eq!(again["allowed"], json!(true), "headroom must be usable again");
+    let again = spend(&f, f.payee.id().as_str(), NearToken::from_near(1)).await?;
+    assert_eq!(
+        again["allowed"],
+        json!(true),
+        "headroom must be usable again"
+    );
     Ok(())
 }
 
@@ -225,8 +249,14 @@ async fn owner_method_without_one_yocto_is_rejected() -> anyhow::Result<()> {
         .max_gas()
         .transact()
         .await?;
-    assert!(out.is_failure(), "owner method must reject a zero-deposit call");
-    assert_eq!(f.vault.view("is_paused").await?.json::<bool>()?, false);
+    assert!(
+        out.is_failure(),
+        "owner method must reject a zero-deposit call"
+    );
+    assert!(
+        !f.vault.view("is_paused").await?.json::<bool>()?,
+        "the vault must remain unpaused"
+    );
     Ok(())
 }
 
@@ -275,7 +305,10 @@ async fn kill_switch_stops_settled_spending() -> anyhow::Result<()> {
     let f = setup().await?;
     let to = f.payee.id().to_string();
 
-    assert_eq!(spend(&f, &to, NearToken::from_millinear(100)).await?["allowed"], json!(true));
+    assert_eq!(
+        spend(&f, &to, NearToken::from_millinear(100)).await?["allowed"],
+        json!(true)
+    );
 
     f.owner
         .call(f.vault.id(), "set_paused")

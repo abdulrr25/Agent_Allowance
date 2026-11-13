@@ -183,11 +183,11 @@ impl Contract {
         allowlist: Vec<AccountId>,
     ) {
         self.assert_owner();
+        require!(self.agents.len() < MAX_AGENTS, "agent limit reached");
         require!(
-            self.agents.len() < MAX_AGENTS,
-            "agent limit reached"
+            !self.agents.contains_key(&agent_id),
+            "agent already registered"
         );
-        require!(!self.agents.contains_key(&agent_id), "agent already registered");
         Self::validate_policy(per_tx_cap, daily_cap, &allowlist);
 
         self.agents.insert(
@@ -325,10 +325,7 @@ impl Contract {
         memo: Option<String>,
     ) -> PromiseOrValue<SpendResult> {
         let agent_id = env::predecessor_account_id();
-        require!(
-            self.agents.contains_key(&agent_id),
-            "unregistered agent"
-        );
+        require!(self.agents.contains_key(&agent_id), "unregistered agent");
         if let Some(m) = &memo {
             require!(m.len() <= MAX_MEMO, "memo too long");
         }
@@ -355,12 +352,7 @@ impl Contract {
                 Some(DenyReason::AmountZero)
             } else if requested > policy.per_tx_cap.0 {
                 Some(DenyReason::ExceedsPerTxCap)
-            } else if policy
-                .spent_in_window
-                .0
-                .saturating_add(requested)
-                > policy.daily_cap.0
-            {
+            } else if policy.spent_in_window.0.saturating_add(requested) > policy.daily_cap.0 {
                 Some(DenyReason::ExceedsDailyCap)
             } else if !policy.allowlist.contains(&recipient) {
                 Some(DenyReason::RecipientNotAllowlisted)
@@ -381,8 +373,7 @@ impl Contract {
                     // headroom and cannot double-spend.
                     policy.spent_in_window =
                         U128(policy.spent_in_window.0.saturating_add(requested));
-                    policy.lifetime_spent =
-                        U128(policy.lifetime_spent.0.saturating_add(requested));
+                    policy.lifetime_spent = U128(policy.lifetime_spent.0.saturating_add(requested));
                     policy.allowed_count = policy.allowed_count.saturating_add(1);
                     Ok(policy.window_start_ns)
                 }
@@ -424,12 +415,7 @@ impl Contract {
                         .then(
                             Self::ext(env::current_account_id())
                                 .with_static_gas(CALLBACK_GAS)
-                                .on_spend_complete(
-                                    agent_id,
-                                    recipient,
-                                    amount,
-                                    window_start_ns,
-                                ),
+                                .on_spend_complete(agent_id, recipient, amount, window_start_ns),
                         ),
                 )
             }
@@ -455,8 +441,7 @@ impl Contract {
             // Only refund window spend if the window has not rolled over since
             // the debit; otherwise spent_in_window already restarted at zero.
             if policy.window_start_ns.0 == window_start_ns.0 {
-                policy.spent_in_window =
-                    U128(policy.spent_in_window.0.saturating_sub(requested));
+                policy.spent_in_window = U128(policy.spent_in_window.0.saturating_sub(requested));
             }
             policy.lifetime_spent = U128(policy.lifetime_spent.0.saturating_sub(requested));
             policy.allowed_count = policy.allowed_count.saturating_sub(1);
@@ -554,16 +539,12 @@ impl Contract {
     /// call and a leaked agent key can never reach these methods.
     fn assert_owner(&self) {
         assert_one_yocto();
-        require!(
-            env::predecessor_account_id() == self.owner_id,
-            "owner only"
-        );
+        require!(env::predecessor_account_id() == self.owner_id, "owner only");
     }
 
     /// Liquid balance, excluding storage staking and the safety buffer.
     fn available_balance_internal() -> NearToken {
-        let locked = env::storage_byte_cost()
-            .saturating_mul(env::storage_usage() as u128);
+        let locked = env::storage_byte_cost().saturating_mul(env::storage_usage() as u128);
         env::account_balance()
             .saturating_sub(locked)
             .saturating_sub(SAFETY_BUFFER)
@@ -576,10 +557,7 @@ impl Contract {
             per_tx_cap.0 <= daily_cap.0,
             "per_tx_cap cannot exceed daily_cap"
         );
-        require!(
-            allowlist.len() <= MAX_ALLOWLIST,
-            "allowlist too large"
-        );
+        require!(allowlist.len() <= MAX_ALLOWLIST, "allowlist too large");
         require!(!allowlist.is_empty(), "allowlist cannot be empty");
         let mut seen = allowlist.to_vec();
         seen.sort();
@@ -596,11 +574,21 @@ mod tests {
 
     const ONE_YOCTO: NearToken = NearToken::from_yoctonear(1);
 
-    fn owner() -> AccountId { accounts(0) }
-    fn agent() -> AccountId { accounts(1) }
-    fn allowed_payee() -> AccountId { accounts(2) }
-    fn attacker() -> AccountId { accounts(3) }
-    fn stranger() -> AccountId { accounts(4) }
+    fn owner() -> AccountId {
+        accounts(0)
+    }
+    fn agent() -> AccountId {
+        accounts(1)
+    }
+    fn allowed_payee() -> AccountId {
+        accounts(2)
+    }
+    fn attacker() -> AccountId {
+        accounts(3)
+    }
+    fn stranger() -> AccountId {
+        accounts(4)
+    }
 
     fn ctx(predecessor: AccountId, deposit: NearToken, ts: u64) -> VMContext {
         VMContextBuilder::new()
@@ -633,9 +621,16 @@ mod tests {
         ts: u64,
     ) -> SpendResult {
         testing_env!(ctx(who, NearToken::from_yoctonear(0), ts));
-        match c.request_spend(to, U128(NearToken::from_near(near_amount).as_yoctonear()), None) {
+        match c.request_spend(
+            to,
+            U128(NearToken::from_near(near_amount).as_yoctonear()),
+            None,
+        ) {
             PromiseOrValue::Value(r) => r,
-            PromiseOrValue::Promise(_) => SpendResult { allowed: true, reason: None },
+            PromiseOrValue::Promise(_) => SpendResult {
+                allowed: true,
+                reason: None,
+            },
         }
     }
 
@@ -660,7 +655,10 @@ mod tests {
     fn blocks_prompt_injected_drain_to_unknown_recipient() {
         let mut c = setup();
         let r = spend(&mut c, agent(), attacker(), 1, 0);
-        assert!(!r.allowed, "drain to non-allowlisted address must be denied");
+        assert!(
+            !r.allowed,
+            "drain to non-allowlisted address must be denied"
+        );
         assert_eq!(r.reason, Some(DenyReason::RecipientNotAllowlisted));
         let p = c.get_policy(agent()).unwrap();
         assert_eq!(p.denied_count, 1, "denial must be recorded, not reverted");
@@ -840,7 +838,10 @@ mod tests {
         let mut c = setup();
         assert!(spend(&mut c, agent(), allowed_payee(), 1, 0).allowed);
         let before = c.get_policy(agent()).unwrap();
-        assert_eq!(before.spent_in_window.0, NearToken::from_near(1).as_yoctonear());
+        assert_eq!(
+            before.spent_in_window.0,
+            NearToken::from_near(1).as_yoctonear()
+        );
 
         // Simulate the transfer failing; the private callback refunds headroom.
         testing_env!(ctx(accounts(5), NearToken::from_yoctonear(0), 0));
@@ -852,7 +853,10 @@ mod tests {
             Err(PromiseError::Failed),
         );
         let after = c.get_policy(agent()).unwrap();
-        assert_eq!(after.spent_in_window.0, 0, "failed transfer must refund headroom");
+        assert_eq!(
+            after.spent_in_window.0, 0,
+            "failed transfer must refund headroom"
+        );
         assert_eq!(after.lifetime_spent.0, 0);
     }
 

@@ -141,7 +141,7 @@ python3 scripts/verify.py          # verify on-chain, zero setup
 ```
 
 ```bash
-cd contract && cargo test          # 19 unit tests, including the attacks
+cd contract && cargo test          # 31 unit tests, including the attacks
 ```
 
 ```bash
@@ -164,8 +164,8 @@ deploy, restrict the key, delete the full-access key, then run the attack:
 Two layers, in **separate crates**, deliberately.
 
 ```bash
-cd contract && cargo test            # 19 unit tests — fast, no network
-cd integration-tests && cargo test   # 7 sandbox tests — real NEAR node
+cd contract && cargo test            # 31 unit tests — fast, no network
+cd integration-tests && cargo test   # 11 sandbox tests — real NEAR node
 ```
 
 **Unit tests** cover policy logic and authorization: the prompt-injected drain,
@@ -186,6 +186,10 @@ reentrancy defense depends on. These run against a real sandbox node:
 | `owner_method_without_one_yocto_is_rejected` | the 1 yoctoNEAR gate actually blocks calls |
 | `agent_cannot_pause_or_widen_policy` | the agent cannot escalate its own privileges |
 | `kill_switch_stops_settled_spending` | pausing halts a working agent immediately |
+| `token_deposit_is_credited` | an opted-in token deposit is recorded |
+| `unknown_token_deposit_is_refunded` | an unknown token is handed back and creates no state |
+| `failed_token_transfer_restores_held_balance` | a failing `ft_transfer` credits the balance back |
+| `token_drain_to_unlisted_recipient_is_blocked` | the allowlist governs tokens as it governs NEAR |
 
 They live in their own crate because the sandbox downloads a node binary on
 first run and needs network access. `cd contract && cargo test` is the command
@@ -242,6 +246,36 @@ endpoints and the page renders half-broken.
 
 ---
 
+## Stablecoins
+
+Agents pay for things in stablecoins, not native NEAR, so the vault governs
+NEP-141 tokens under the same rules.
+
+The owner opts a token in with `add_token`, then sets a per-agent policy for it
+with `set_ft_policy` — per-transaction cap, daily cap, recipient allowlist, all
+denominated in that token. The agent spends with `request_spend_ft`, which runs
+the *same* evaluator as the native path, so a token spend cannot drift from the
+rules that govern NEAR.
+
+Two details worth noting:
+
+**Deposits of tokens the owner never opted into are refused** and returned in
+full. Accepting them would let any stranger create state in this contract at
+the vault's expense — the storage-exhaustion attack again, arriving through a
+different door.
+
+**The held balance is debited before `ft_transfer` is scheduled** and credited
+back in the callback if it fails, exactly as on the native path. There is a
+sandbox test where the transfer genuinely fails and the balance comes back.
+
+Adding this changed the contract's stored layout, so the upgrade ships with a
+`migrate` method that carries agents, counters and the kill switch across
+untouched. It was rehearsed on a throwaway deployment before the live contract
+was touched, and the live migration preserved all of it: same agents, same
+counters, same denial history.
+
+---
+
 ## Design decisions worth defending
 
 **Denials are recorded, not reverted.** A denied request returns a value rather
@@ -284,12 +318,14 @@ Stated plainly, because a security tool that overclaims is worse than none:
   threat model.
 - **It does not make prompt injection stop working.** It makes a successful
   injection boring.
-- **It governs native NEAR only.** Agents paying for real services will mostly
-  spend stablecoins, and NEP-141 tokens move by calling the token contract
-  rather than by a native transfer. Extending to them means accepting tokens
-  via `ft_on_transfer`, holding per-token caps, and paying out with
-  `ft_transfer_call` plus a callback — the same policy engine, a wider surface.
-  That is the obvious next step and it is not built here.
+- **Caps are nominal, not valued.** A token policy is written in that token's
+  own units. There is no price oracle, so a cap of 100 units means 100 units
+  whatever they are worth today. For stablecoins that is close enough; for a
+  volatile asset it is not a dollar limit and should not be read as one.
+- **Token payouts need the recipient registered.** NEP-141 requires storage
+  registration, so a transfer to an unregistered account fails. The vault
+  handles that correctly — the balance is credited back — but the payment does
+  not go through until the recipient registers.
 - **It is unaudited.** A hackathon build on testnet. Do not put real funds
   behind it without review.
 
@@ -301,26 +337,33 @@ The honest claim is **blast-radius containment**, not invulnerability.
 
 **Owner only** — each requires 1 yoctoNEAR:
 `add_agent` · `update_policy` · `set_agent_enabled` · `revoke_agent` ·
-`set_paused` · `withdraw`
+`set_paused` · `withdraw` · `add_token` · `remove_token` · `set_ft_policy` ·
+`revoke_ft_policy`
 
-**Agent:** `request_spend(recipient, amount, memo)` → `{allowed, reason}`;
-schedules a transfer only when allowed.
+**Agent:**
+`request_spend(recipient, amount, memo)` → `{allowed, reason}` — native NEAR.
+`request_spend_ft(token_id, recipient, amount, memo)` → `{allowed, reason}` — NEP-141.
+Both schedule a transfer only when allowed.
+
+**Token contracts:** `ft_on_transfer(sender_id, amount, msg)` — the NEP-141
+deposit hook; returns the unused amount, which is the full amount for a token
+the owner has not opted into.
 
 **Views:** `dashboard` · `get_owner` · `is_paused` · `get_policy` ·
 `get_agent_status` · `list_agents` · `vault_balance` · `available_balance` ·
-`stats`
+`stats` · `get_ft_policy` · `ft_balance` · `list_tokens`
 
 **Deny reasons:** `vault_paused` · `agent_disabled` · `amount_zero` ·
 `exceeds_per_tx_cap` · `exceeds_daily_cap` · `recipient_not_allowlisted` ·
-`insufficient_vault_balance`
+`insufficient_vault_balance` · `token_not_accepted`
 
 ---
 
 ## Layout
 
 ```
-contract/src/lib.rs           the vault: policy, enforcement, events, 19 unit tests
-integration-tests/            7 sandbox tests covering the settlement path
+contract/src/lib.rs           the vault: policy, enforcement, events, 31 unit tests
+integration-tests/            11 sandbox tests covering the settlement path
 scripts/verify.py             on-chain verification, stdlib only
 scripts/reproduce-demo.sh     recreate the whole demo on testnet
 web/index.html                dashboard, no build step

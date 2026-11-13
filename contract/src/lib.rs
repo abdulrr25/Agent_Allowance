@@ -38,11 +38,16 @@
 //!   during the pending callback cannot double-spend.
 
 use near_sdk::json_types::{U128, U64};
-use near_sdk::store::IterableMap;
+use near_sdk::store::{IterableMap, IterableSet};
 use near_sdk::{
     assert_one_yocto, env, near, require, AccountId, BorshStorageKey, Gas, NearToken,
     PanicOnDefault, Promise, PromiseError, PromiseOrValue,
 };
+
+/// Gas forwarded to a NEP-141 `ft_transfer`.
+const FT_TRANSFER_GAS: Gas = Gas::from_tgas(10);
+/// Gas reserved for the fungible-token spend callback.
+const FT_CALLBACK_GAS: Gas = Gas::from_tgas(10);
 
 /// Length of the rolling spend window: 24 hours in nanoseconds.
 const DAY_NS: u64 = 86_400_000_000_000;
@@ -52,16 +57,31 @@ const MAX_ALLOWLIST: usize = 20;
 const MAX_AGENTS: u32 = 50;
 /// Maximum memo length in bytes.
 const MAX_MEMO: usize = 256;
+/// Maximum opted-in fungible tokens.
+const MAX_TOKENS: u32 = 20;
+/// Maximum agent/token policy pairs.
+const MAX_FT_POLICIES: u32 = 100;
 /// Gas reserved for the spend callback.
 const CALLBACK_GAS: Gas = Gas::from_tgas(5);
 /// Liquid NEAR always retained above storage staking, so the vault can never
 /// transfer itself into a state where it cannot pay for its own storage.
 const SAFETY_BUFFER: NearToken = NearToken::from_millinear(50);
 
+/// The slice of NEP-141 this contract calls. The trait itself is only a
+/// declaration; `ext_contract` generates the `ext_ft` builder we actually use.
+#[allow(dead_code)]
+#[near_sdk::ext_contract(ext_ft)]
+trait FungibleToken {
+    fn ft_transfer(&mut self, receiver_id: AccountId, amount: U128, memo: Option<String>);
+}
+
 #[derive(BorshStorageKey)]
 #[near(serializers = [borsh])]
 enum StorageKey {
     Agents,
+    FtPolicies,
+    FtBalances,
+    AcceptedTokens,
 }
 
 /// Why a spend request was refused. Returned to the caller and emitted as an
@@ -76,6 +96,7 @@ pub enum DenyReason {
     ExceedsDailyCap,
     RecipientNotAllowlisted,
     InsufficientVaultBalance,
+    TokenNotAccepted,
 }
 
 impl DenyReason {
@@ -88,6 +109,7 @@ impl DenyReason {
             DenyReason::ExceedsDailyCap => "exceeds_daily_cap",
             DenyReason::RecipientNotAllowlisted => "recipient_not_allowlisted",
             DenyReason::InsufficientVaultBalance => "insufficient_vault_balance",
+            DenyReason::TokenNotAccepted => "token_not_accepted",
         }
     }
 }
@@ -124,6 +146,13 @@ pub struct AgentStatus {
     pub window_resets_in_ns: U64,
 }
 
+/// A fungible token balance held by the vault.
+#[near(serializers = [json])]
+pub struct TokenHolding {
+    pub token_id: AccountId,
+    pub balance: U128,
+}
+
 /// Everything the dashboard needs, in a single view call. Front ends that
 /// issue one request per field get throttled by public RPC endpoints, so the
 /// whole page state is served here at once.
@@ -136,6 +165,7 @@ pub struct Dashboard {
     pub total_spent: U128,
     pub total_denied: u64,
     pub agents: Vec<AgentStatus>,
+    pub tokens: Vec<TokenHolding>,
 }
 
 #[near(contract_state)]
@@ -146,6 +176,76 @@ pub struct Contract {
     agents: IterableMap<AccountId, AgentPolicy>,
     total_spent: U128,
     total_denied: u64,
+    /// Fungible-token policies, keyed by `agent_id|token_id`. The same policy
+    /// shape as native NEAR, so the rules behave identically per token.
+    ft_policies: IterableMap<String, AgentPolicy>,
+    /// Token balances the vault currently holds.
+    ft_balances: IterableMap<AccountId, U128>,
+    /// Tokens the owner has opted into. Deposits of anything else are rejected,
+    /// so nobody can create state in this contract at our expense.
+    accepted_tokens: IterableSet<AccountId>,
+}
+
+/// State as it existed before fungible-token support, used only by `migrate`.
+#[near(serializers = [borsh])]
+struct LegacyContract {
+    owner_id: AccountId,
+    paused: bool,
+    agents: IterableMap<AccountId, AgentPolicy>,
+    total_spent: U128,
+    total_denied: u64,
+}
+
+fn ft_key(agent_id: &AccountId, token_id: &AccountId) -> String {
+    format!("{}|{}", agent_id, token_id)
+}
+
+/// Apply the spending policy and update counters.
+///
+/// Shared by the native-NEAR and fungible-token paths so a token spend cannot
+/// drift from the rules that govern NEAR. Debits before the caller schedules a
+/// transfer; the caller restores on failure.
+fn evaluate(
+    policy: &mut AgentPolicy,
+    paused: bool,
+    now: u64,
+    requested: u128,
+    recipient: &AccountId,
+    available: u128,
+) -> Result<U64, DenyReason> {
+    if now.saturating_sub(policy.window_start_ns.0) >= DAY_NS {
+        policy.window_start_ns = U64(now);
+        policy.spent_in_window = U128(0);
+    }
+    let deny = if paused {
+        Some(DenyReason::VaultPaused)
+    } else if !policy.enabled {
+        Some(DenyReason::AgentDisabled)
+    } else if requested == 0 {
+        Some(DenyReason::AmountZero)
+    } else if requested > policy.per_tx_cap.0 {
+        Some(DenyReason::ExceedsPerTxCap)
+    } else if policy.spent_in_window.0.saturating_add(requested) > policy.daily_cap.0 {
+        Some(DenyReason::ExceedsDailyCap)
+    } else if !policy.allowlist.contains(recipient) {
+        Some(DenyReason::RecipientNotAllowlisted)
+    } else if requested > available {
+        Some(DenyReason::InsufficientVaultBalance)
+    } else {
+        None
+    };
+    match deny {
+        Some(reason) => {
+            policy.denied_count = policy.denied_count.saturating_add(1);
+            Err(reason)
+        }
+        None => {
+            policy.spent_in_window = U128(policy.spent_in_window.0.saturating_add(requested));
+            policy.lifetime_spent = U128(policy.lifetime_spent.0.saturating_add(requested));
+            policy.allowed_count = policy.allowed_count.saturating_add(1);
+            Ok(policy.window_start_ns)
+        }
+    }
 }
 
 fn emit_event(event: &str, data: near_sdk::serde_json::Value) {
@@ -168,6 +268,30 @@ impl Contract {
             agents: IterableMap::new(StorageKey::Agents),
             total_spent: U128(0),
             total_denied: 0,
+            ft_policies: IterableMap::new(StorageKey::FtPolicies),
+            ft_balances: IterableMap::new(StorageKey::FtBalances),
+            accepted_tokens: IterableSet::new(StorageKey::AcceptedTokens),
+        }
+    }
+
+    /// Carry existing state across the upgrade that added fungible-token
+    /// support. Agents, counters and the kill switch are preserved exactly;
+    /// only the new collections are introduced.
+    #[private]
+    #[init(ignore_state)]
+    pub fn migrate() -> Self {
+        let old: LegacyContract = env::state_read().unwrap_or_else(|| {
+            env::panic_str("no existing state to migrate");
+        });
+        Self {
+            owner_id: old.owner_id,
+            paused: old.paused,
+            agents: old.agents,
+            total_spent: old.total_spent,
+            total_denied: old.total_denied,
+            ft_policies: IterableMap::new(StorageKey::FtPolicies),
+            ft_balances: IterableMap::new(StorageKey::FtBalances),
+            accepted_tokens: IterableSet::new(StorageKey::AcceptedTokens),
         }
     }
 
@@ -311,6 +435,265 @@ impl Contract {
         );
     }
 
+    // ------------------------------------------------------ fungible tokens
+
+    /// Opt into a NEP-141 token. Deposits of anything else are refused, so no
+    /// stranger can create state in this contract at the vault's expense.
+    #[payable]
+    pub fn add_token(&mut self, token_id: AccountId) {
+        self.assert_owner();
+        require!(
+            self.accepted_tokens.len() < MAX_TOKENS,
+            "token limit reached"
+        );
+        if self.accepted_tokens.insert(token_id.clone()) {
+            self.ft_balances.insert(token_id.clone(), U128(0));
+        }
+        emit_event(
+            "token_accepted",
+            near_sdk::serde_json::json!({ "token_id": token_id }),
+        );
+    }
+
+    /// Stop accepting a token. Any balance already held stays withdrawable.
+    #[payable]
+    pub fn remove_token(&mut self, token_id: AccountId) {
+        self.assert_owner();
+        require!(self.accepted_tokens.remove(&token_id), "token not accepted");
+        emit_event(
+            "token_removed",
+            near_sdk::serde_json::json!({ "token_id": token_id }),
+        );
+    }
+
+    /// Set an agent's spending policy for one token. Owner only.
+    #[payable]
+    pub fn set_ft_policy(
+        &mut self,
+        agent_id: AccountId,
+        token_id: AccountId,
+        per_tx_cap: U128,
+        daily_cap: U128,
+        allowlist: Vec<AccountId>,
+    ) {
+        self.assert_owner();
+        require!(
+            self.accepted_tokens.contains(&token_id),
+            "token not accepted"
+        );
+        require!(self.agents.contains_key(&agent_id), "unknown agent");
+        Self::validate_policy(per_tx_cap, daily_cap, &allowlist);
+        let key = ft_key(&agent_id, &token_id);
+        let now = env::block_timestamp();
+        match self.ft_policies.get_mut(&key) {
+            Some(existing) => {
+                existing.per_tx_cap = per_tx_cap;
+                existing.daily_cap = daily_cap;
+                existing.allowlist = allowlist.clone();
+                existing.enabled = true;
+            }
+            None => {
+                require!(
+                    self.ft_policies.len() < MAX_FT_POLICIES,
+                    "token policy limit reached"
+                );
+                self.ft_policies.insert(
+                    key,
+                    AgentPolicy {
+                        enabled: true,
+                        per_tx_cap,
+                        daily_cap,
+                        window_start_ns: U64(now),
+                        spent_in_window: U128(0),
+                        lifetime_spent: U128(0),
+                        allowed_count: 0,
+                        denied_count: 0,
+                        allowlist: allowlist.clone(),
+                    },
+                );
+            }
+        }
+        emit_event(
+            "ft_policy_set",
+            near_sdk::serde_json::json!({
+                "agent_id": agent_id, "token_id": token_id,
+                "per_tx_cap": per_tx_cap, "daily_cap": daily_cap,
+                "allowlist": allowlist,
+            }),
+        );
+    }
+
+    /// Remove an agent's policy for one token. Owner only.
+    #[payable]
+    pub fn revoke_ft_policy(&mut self, agent_id: AccountId, token_id: AccountId) {
+        self.assert_owner();
+        require!(
+            self.ft_policies
+                .remove(&ft_key(&agent_id, &token_id))
+                .is_some(),
+            "no policy for that agent and token"
+        );
+        emit_event(
+            "ft_policy_revoked",
+            near_sdk::serde_json::json!({ "agent_id": agent_id, "token_id": token_id }),
+        );
+    }
+
+    /// NEP-141 deposit hook. The token contract calls this when someone sends
+    /// tokens here. Returns the unused amount, which is zero: the vault keeps
+    /// what it is given, provided the token was opted into.
+    pub fn ft_on_transfer(
+        &mut self,
+        sender_id: AccountId,
+        amount: U128,
+        msg: String,
+    ) -> PromiseOrValue<U128> {
+        let token_id = env::predecessor_account_id();
+        require!(msg.len() <= MAX_MEMO, "msg too long");
+        // Refuse unknown tokens by returning the full amount, which makes the
+        // token contract refund the sender. Accepting would let anyone grow
+        // our state for free.
+        if !self.accepted_tokens.contains(&token_id) {
+            emit_event(
+                "ft_deposit_refused",
+                near_sdk::serde_json::json!({
+                    "token_id": token_id, "from": sender_id,
+                    "amount": amount, "reason": "token_not_accepted",
+                }),
+            );
+            return PromiseOrValue::Value(amount);
+        }
+        let held = self.ft_balances.get(&token_id).map(|b| b.0).unwrap_or(0);
+        self.ft_balances
+            .insert(token_id.clone(), U128(held.saturating_add(amount.0)));
+        emit_event(
+            "ft_deposit",
+            near_sdk::serde_json::json!({
+                "token_id": token_id, "from": sender_id, "amount": amount, "msg": msg,
+            }),
+        );
+        PromiseOrValue::Value(U128(0))
+    }
+
+    /// Request a token spend. Mirrors `request_spend` exactly, against the
+    /// policy registered for this agent and token.
+    pub fn request_spend_ft(
+        &mut self,
+        token_id: AccountId,
+        recipient: AccountId,
+        amount: U128,
+        memo: Option<String>,
+    ) -> PromiseOrValue<SpendResult> {
+        let agent_id = env::predecessor_account_id();
+        let key = ft_key(&agent_id, &token_id);
+        require!(
+            self.ft_policies.contains_key(&key),
+            "no policy for that token"
+        );
+        if let Some(m) = &memo {
+            require!(m.len() <= MAX_MEMO, "memo too long");
+        }
+
+        let now = env::block_timestamp();
+        let paused = self.paused;
+        let requested = amount.0;
+        let accepted = self.accepted_tokens.contains(&token_id);
+        let held = self.ft_balances.get(&token_id).map(|b| b.0).unwrap_or(0);
+
+        let decision = if !accepted {
+            let policy = self.ft_policies.get_mut(&key).unwrap();
+            policy.denied_count = policy.denied_count.saturating_add(1);
+            Err(DenyReason::TokenNotAccepted)
+        } else {
+            let policy = self.ft_policies.get_mut(&key).unwrap();
+            evaluate(policy, paused, now, requested, &recipient, held)
+        };
+
+        match decision {
+            Err(reason) => {
+                self.total_denied = self.total_denied.saturating_add(1);
+                emit_event(
+                    "ft_spend_denied",
+                    near_sdk::serde_json::json!({
+                        "agent_id": agent_id, "token_id": token_id,
+                        "recipient": recipient, "amount": amount,
+                        "reason": reason.as_str(), "memo": memo,
+                    }),
+                );
+                PromiseOrValue::Value(SpendResult {
+                    allowed: false,
+                    reason: Some(reason),
+                })
+            }
+            Ok(window_start_ns) => {
+                // Debit the held balance before scheduling the transfer, for
+                // the same reason as the native path.
+                self.ft_balances
+                    .insert(token_id.clone(), U128(held.saturating_sub(requested)));
+                emit_event(
+                    "ft_spend_allowed",
+                    near_sdk::serde_json::json!({
+                        "agent_id": agent_id, "token_id": token_id,
+                        "recipient": recipient, "amount": amount, "memo": memo,
+                    }),
+                );
+                PromiseOrValue::Promise(
+                    ext_ft::ext(token_id.clone())
+                        .with_attached_deposit(NearToken::from_yoctonear(1))
+                        .with_static_gas(FT_TRANSFER_GAS)
+                        .ft_transfer(recipient.clone(), amount, memo)
+                        .then(
+                            Self::ext(env::current_account_id())
+                                .with_static_gas(FT_CALLBACK_GAS)
+                                .on_ft_spend_complete(
+                                    agent_id,
+                                    token_id,
+                                    recipient,
+                                    amount,
+                                    window_start_ns,
+                                ),
+                        ),
+                )
+            }
+        }
+    }
+
+    /// Settles a token spend, restoring counters and held balance on failure.
+    #[private]
+    pub fn on_ft_spend_complete(
+        &mut self,
+        agent_id: AccountId,
+        token_id: AccountId,
+        recipient: AccountId,
+        amount: U128,
+        window_start_ns: U64,
+        #[callback_result] result: Result<(), PromiseError>,
+    ) -> bool {
+        if result.is_ok() {
+            return true;
+        }
+        let requested = amount.0;
+        let key = ft_key(&agent_id, &token_id);
+        if let Some(policy) = self.ft_policies.get_mut(&key) {
+            if policy.window_start_ns.0 == window_start_ns.0 {
+                policy.spent_in_window = U128(policy.spent_in_window.0.saturating_sub(requested));
+            }
+            policy.lifetime_spent = U128(policy.lifetime_spent.0.saturating_sub(requested));
+            policy.allowed_count = policy.allowed_count.saturating_sub(1);
+        }
+        let held = self.ft_balances.get(&token_id).map(|b| b.0).unwrap_or(0);
+        self.ft_balances
+            .insert(token_id.clone(), U128(held.saturating_add(requested)));
+        emit_event(
+            "ft_spend_reverted",
+            near_sdk::serde_json::json!({
+                "agent_id": agent_id, "token_id": token_id,
+                "recipient": recipient, "amount": amount,
+            }),
+        );
+        false
+    }
+
     // ---------------------------------------------------------------- agent
 
     /// Request a spend. Called by an agent through a FunctionCall access key
@@ -337,47 +720,7 @@ impl Contract {
 
         let decision = {
             let policy = self.agents.get_mut(&agent_id).unwrap();
-
-            // Roll the 24h window forward before evaluating the daily cap.
-            if now.saturating_sub(policy.window_start_ns.0) >= DAY_NS {
-                policy.window_start_ns = U64(now);
-                policy.spent_in_window = U128(0);
-            }
-
-            let deny = if paused {
-                Some(DenyReason::VaultPaused)
-            } else if !policy.enabled {
-                Some(DenyReason::AgentDisabled)
-            } else if requested == 0 {
-                Some(DenyReason::AmountZero)
-            } else if requested > policy.per_tx_cap.0 {
-                Some(DenyReason::ExceedsPerTxCap)
-            } else if policy.spent_in_window.0.saturating_add(requested) > policy.daily_cap.0 {
-                Some(DenyReason::ExceedsDailyCap)
-            } else if !policy.allowlist.contains(&recipient) {
-                Some(DenyReason::RecipientNotAllowlisted)
-            } else if requested > available {
-                Some(DenyReason::InsufficientVaultBalance)
-            } else {
-                None
-            };
-
-            match deny {
-                Some(reason) => {
-                    policy.denied_count = policy.denied_count.saturating_add(1);
-                    Err(reason)
-                }
-                None => {
-                    // Debit BEFORE scheduling the transfer. A concurrent
-                    // request during the pending callback sees the reduced
-                    // headroom and cannot double-spend.
-                    policy.spent_in_window =
-                        U128(policy.spent_in_window.0.saturating_add(requested));
-                    policy.lifetime_spent = U128(policy.lifetime_spent.0.saturating_add(requested));
-                    policy.allowed_count = policy.allowed_count.saturating_add(1);
-                    Ok(policy.window_start_ns)
-                }
-            }
+            evaluate(policy, paused, now, requested, &recipient, available)
         };
 
         match decision {
@@ -490,6 +833,18 @@ impl Contract {
         })
     }
 
+    pub fn get_ft_policy(&self, agent_id: AccountId, token_id: AccountId) -> Option<AgentPolicy> {
+        self.ft_policies.get(&ft_key(&agent_id, &token_id)).cloned()
+    }
+
+    pub fn ft_balance(&self, token_id: AccountId) -> U128 {
+        self.ft_balances.get(&token_id).copied().unwrap_or(U128(0))
+    }
+
+    pub fn list_tokens(&self) -> Vec<AccountId> {
+        self.accepted_tokens.iter().cloned().collect()
+    }
+
     pub fn list_agents(&self) -> Vec<AccountId> {
         self.agents.keys().cloned().collect()
     }
@@ -529,6 +884,14 @@ impl Contract {
             total_spent: self.total_spent,
             total_denied: self.total_denied,
             agents,
+            tokens: self
+                .accepted_tokens
+                .iter()
+                .map(|t| TokenHolding {
+                    token_id: t.clone(),
+                    balance: self.ft_balances.get(t).copied().unwrap_or(U128(0)),
+                })
+                .collect(),
         }
     }
 
@@ -858,6 +1221,182 @@ mod tests {
             "failed transfer must refund headroom"
         );
         assert_eq!(after.lifetime_spent.0, 0);
+    }
+
+    // ------------------------------------------------------ fungible tokens
+
+    fn token() -> AccountId {
+        "usdc.test.near".parse().unwrap()
+    }
+    fn other_token() -> AccountId {
+        "scam.test.near".parse().unwrap()
+    }
+
+    /// Vault with one agent and a USDC policy: 10 per tx, 50 per day.
+    fn setup_ft() -> Contract {
+        let mut c = setup();
+        testing_env!(ctx(owner(), ONE_YOCTO, 0));
+        c.add_token(token());
+        c.set_ft_policy(agent(), token(), U128(10), U128(50), vec![allowed_payee()]);
+        // Fund the vault with 100 USDC, as the token contract would.
+        testing_env!(ctx(token(), NearToken::from_yoctonear(0), 0));
+        let _ = c.ft_on_transfer(owner(), U128(100), String::new());
+        c
+    }
+
+    fn spend_ft(c: &mut Contract, who: AccountId, to: AccountId, amount: u128) -> SpendResult {
+        testing_env!(ctx(who, NearToken::from_yoctonear(0), 0));
+        match c.request_spend_ft(token(), to, U128(amount), None) {
+            PromiseOrValue::Value(r) => r,
+            PromiseOrValue::Promise(_) => SpendResult {
+                allowed: true,
+                reason: None,
+            },
+        }
+    }
+
+    #[test]
+    fn accepts_deposits_of_opted_in_tokens() {
+        let c = setup_ft();
+        assert_eq!(c.ft_balance(token()).0, 100);
+    }
+
+    /// An unknown token must be refunded in full and must not create state.
+    /// Accepting one would let anyone grow our storage at our expense.
+    #[test]
+    fn refuses_deposits_of_unknown_tokens() {
+        let mut c = setup_ft();
+        testing_env!(ctx(other_token(), NearToken::from_yoctonear(0), 0));
+        match c.ft_on_transfer(attacker(), U128(500), String::new()) {
+            PromiseOrValue::Value(refund) => {
+                assert_eq!(refund.0, 500, "the whole deposit must be returned")
+            }
+            _ => panic!("unknown token must not be accepted"),
+        }
+        assert_eq!(
+            c.ft_balance(other_token()).0,
+            0,
+            "no balance may be recorded"
+        );
+        assert!(!c.list_tokens().contains(&other_token()));
+    }
+
+    #[test]
+    fn allows_token_spend_within_policy() {
+        let mut c = setup_ft();
+        let r = spend_ft(&mut c, agent(), allowed_payee(), 10);
+        assert!(r.allowed);
+        assert_eq!(
+            c.ft_balance(token()).0,
+            90,
+            "held balance debited before transfer"
+        );
+    }
+
+    /// The headline claim, in token form.
+    #[test]
+    fn blocks_token_drain_to_unknown_recipient() {
+        let mut c = setup_ft();
+        let r = spend_ft(&mut c, agent(), attacker(), 10);
+        assert!(!r.allowed);
+        assert_eq!(r.reason, Some(DenyReason::RecipientNotAllowlisted));
+        assert_eq!(
+            c.ft_balance(token()).0,
+            100,
+            "no tokens may move on a denial"
+        );
+    }
+
+    #[test]
+    fn enforces_token_per_tx_cap() {
+        let mut c = setup_ft();
+        let r = spend_ft(&mut c, agent(), allowed_payee(), 11);
+        assert_eq!(r.reason, Some(DenyReason::ExceedsPerTxCap));
+    }
+
+    #[test]
+    fn enforces_token_daily_cap() {
+        let mut c = setup_ft();
+        for _ in 0..5 {
+            assert!(spend_ft(&mut c, agent(), allowed_payee(), 10).allowed);
+        }
+        let r = spend_ft(&mut c, agent(), allowed_payee(), 10);
+        assert_eq!(r.reason, Some(DenyReason::ExceedsDailyCap));
+    }
+
+    #[test]
+    fn token_spend_cannot_exceed_held_balance() {
+        let mut c = setup_ft();
+        testing_env!(ctx(owner(), ONE_YOCTO, 0));
+        c.set_ft_policy(
+            agent(),
+            token(),
+            U128(500),
+            U128(500),
+            vec![allowed_payee()],
+        );
+        let r = spend_ft(&mut c, agent(), allowed_payee(), 200);
+        assert_eq!(r.reason, Some(DenyReason::InsufficientVaultBalance));
+    }
+
+    #[test]
+    fn kill_switch_also_halts_token_spending() {
+        let mut c = setup_ft();
+        testing_env!(ctx(owner(), ONE_YOCTO, 0));
+        c.set_paused(true);
+        let r = spend_ft(&mut c, agent(), allowed_payee(), 10);
+        assert_eq!(r.reason, Some(DenyReason::VaultPaused));
+    }
+
+    #[test]
+    fn failed_token_transfer_restores_balance_and_headroom() {
+        let mut c = setup_ft();
+        assert!(spend_ft(&mut c, agent(), allowed_payee(), 10).allowed);
+        assert_eq!(c.ft_balance(token()).0, 90);
+        let p = c.get_ft_policy(agent(), token()).unwrap();
+
+        testing_env!(ctx(accounts(5), NearToken::from_yoctonear(0), 0));
+        c.on_ft_spend_complete(
+            agent(),
+            token(),
+            allowed_payee(),
+            U128(10),
+            p.window_start_ns,
+            Err(PromiseError::Failed),
+        );
+        assert_eq!(c.ft_balance(token()).0, 100, "tokens must be credited back");
+        let after = c.get_ft_policy(agent(), token()).unwrap();
+        assert_eq!(after.spent_in_window.0, 0, "headroom must be restored");
+    }
+
+    #[test]
+    #[should_panic(expected = "no policy for that token")]
+    fn agent_without_token_policy_is_reverted() {
+        let mut c = setup_ft();
+        testing_env!(ctx(attacker(), NearToken::from_yoctonear(0), 0));
+        let _ = c.request_spend_ft(token(), allowed_payee(), U128(1), None);
+    }
+
+    #[test]
+    #[should_panic(expected = "owner only")]
+    fn agent_cannot_opt_in_a_token() {
+        let mut c = setup_ft();
+        testing_env!(ctx(agent(), ONE_YOCTO, 0));
+        c.add_token(other_token());
+    }
+
+    #[test]
+    #[should_panic(expected = "token not accepted")]
+    fn policy_requires_an_accepted_token() {
+        let mut c = setup_ft();
+        testing_env!(ctx(owner(), ONE_YOCTO, 0));
+        c.set_ft_policy(
+            agent(),
+            other_token(),
+            U128(1),
+            U128(1),
+            vec![allowed_payee()],
+        );
     }
 
     #[test]

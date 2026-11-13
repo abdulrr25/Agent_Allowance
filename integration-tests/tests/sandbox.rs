@@ -32,6 +32,7 @@ fn wasm_bytes() -> anyhow::Result<Vec<u8>> {
 }
 
 struct Fixture {
+    worker: near_workspaces::Worker<near_workspaces::network::Sandbox>,
     vault: Contract,
     owner: Account,
     agent: Account,
@@ -76,6 +77,7 @@ async fn setup() -> anyhow::Result<Fixture> {
         .into_result()?;
 
     Ok(Fixture {
+        worker,
         vault,
         owner,
         agent,
@@ -322,5 +324,177 @@ async fn kill_switch_stops_settled_spending() -> anyhow::Result<()> {
     let r = spend(&f, &to, NearToken::from_millinear(100)).await?;
     assert_eq!(r["allowed"], json!(false));
     assert_eq!(r["reason"], json!("VaultPaused"));
+    Ok(())
+}
+
+// ------------------------------------------------------- fungible tokens
+
+/// A stand-in for a NEP-141 contract. It is a plain account with no code, so
+/// `ft_transfer` against it always fails — which is exactly what we need to
+/// exercise the refund path on a real runtime.
+async fn setup_ft(f: &Fixture) -> anyhow::Result<Account> {
+    let token = f.worker.dev_create_account().await?;
+
+    f.owner
+        .call(f.vault.id(), "add_token")
+        .args_json(json!({ "token_id": token.id() }))
+        .deposit(one_yocto())
+        .max_gas()
+        .transact()
+        .await?
+        .into_result()?;
+
+    f.owner
+        .call(f.vault.id(), "set_ft_policy")
+        .args_json(json!({
+            "agent_id": f.agent.id(),
+            "token_id": token.id(),
+            "per_tx_cap": "10",
+            "daily_cap": "50",
+            "allowlist": [f.payee.id()],
+        }))
+        .deposit(one_yocto())
+        .max_gas()
+        .transact()
+        .await?
+        .into_result()?;
+
+    Ok(token)
+}
+
+/// A deposit from an opted-in token must be credited to the vault.
+#[tokio::test]
+async fn token_deposit_is_credited() -> anyhow::Result<()> {
+    let f = setup().await?;
+    let token = setup_ft(&f).await?;
+
+    token
+        .call(f.vault.id(), "ft_on_transfer")
+        .args_json(json!({ "sender_id": f.owner.id(), "amount": "100", "msg": "" }))
+        .max_gas()
+        .transact()
+        .await?
+        .into_result()?;
+
+    let bal: String = f
+        .vault
+        .view("ft_balance")
+        .args_json(json!({ "token_id": token.id() }))
+        .await?
+        .json()?;
+    assert_eq!(bal, "100", "an accepted token deposit must be credited");
+    Ok(())
+}
+
+/// A deposit of a token the owner never opted into must be returned in full
+/// and must not create any state in the vault.
+#[tokio::test]
+async fn unknown_token_deposit_is_refunded() -> anyhow::Result<()> {
+    let f = setup().await?;
+    let rogue = f.worker.dev_create_account().await?;
+
+    let out = rogue
+        .call(f.vault.id(), "ft_on_transfer")
+        .args_json(json!({ "sender_id": rogue.id(), "amount": "500", "msg": "" }))
+        .max_gas()
+        .transact()
+        .await?
+        .into_result()?;
+
+    let refund: String = out.json()?;
+    assert_eq!(refund, "500", "the whole deposit must be handed back");
+
+    let bal: String = f
+        .vault
+        .view("ft_balance")
+        .args_json(json!({ "token_id": rogue.id() }))
+        .await?
+        .json()?;
+    assert_eq!(bal, "0", "no balance may be recorded for an unknown token");
+    Ok(())
+}
+
+/// The token equivalent of the reentrancy guarantee: the held balance is
+/// debited before the transfer is scheduled, so a transfer that fails must
+/// credit it back in the callback. Here `ft_transfer` genuinely fails, because
+/// the token account holds no contract.
+#[tokio::test]
+async fn failed_token_transfer_restores_held_balance() -> anyhow::Result<()> {
+    let f = setup().await?;
+    let token = setup_ft(&f).await?;
+
+    token
+        .call(f.vault.id(), "ft_on_transfer")
+        .args_json(json!({ "sender_id": f.owner.id(), "amount": "100", "msg": "" }))
+        .max_gas()
+        .transact()
+        .await?
+        .into_result()?;
+
+    f.agent
+        .call(f.vault.id(), "request_spend_ft")
+        .args_json(json!({
+            "token_id": token.id(),
+            "recipient": f.payee.id(),
+            "amount": "10",
+            "memo": "integration test",
+        }))
+        .max_gas()
+        .transact()
+        .await?
+        .into_result()?;
+
+    let bal: String = f
+        .vault
+        .view("ft_balance")
+        .args_json(json!({ "token_id": token.id() }))
+        .await?
+        .json()?;
+    assert_eq!(
+        bal, "100",
+        "a failed ft_transfer must credit the held balance back"
+    );
+    Ok(())
+}
+
+/// A compromised agent aiming tokens at an unlisted address moves nothing.
+#[tokio::test]
+async fn token_drain_to_unlisted_recipient_is_blocked() -> anyhow::Result<()> {
+    let f = setup().await?;
+    let token = setup_ft(&f).await?;
+
+    token
+        .call(f.vault.id(), "ft_on_transfer")
+        .args_json(json!({ "sender_id": f.owner.id(), "amount": "100", "msg": "" }))
+        .max_gas()
+        .transact()
+        .await?
+        .into_result()?;
+
+    let out = f
+        .agent
+        .call(f.vault.id(), "request_spend_ft")
+        .args_json(json!({
+            "token_id": token.id(),
+            "recipient": "attacker.nonexistent",
+            "amount": "10",
+            "memo": "drain",
+        }))
+        .max_gas()
+        .transact()
+        .await?
+        .into_result()?;
+
+    let res: serde_json::Value = out.json()?;
+    assert_eq!(res["allowed"], json!(false));
+    assert_eq!(res["reason"], json!("RecipientNotAllowlisted"));
+
+    let bal: String = f
+        .vault
+        .view("ft_balance")
+        .args_json(json!({ "token_id": token.id() }))
+        .await?
+        .json()?;
+    assert_eq!(bal, "100", "no tokens may move on a denial");
     Ok(())
 }

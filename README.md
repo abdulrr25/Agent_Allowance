@@ -122,7 +122,7 @@ python3 scripts/verify.py          # verify on-chain, zero setup
 ```
 
 ```bash
-cd contract && cargo test          # 19 tests, including the attacks
+cd contract && cargo test          # 19 unit tests, including the attacks
 ```
 
 ```bash
@@ -132,6 +132,46 @@ cd contract && cargo build --target wasm32-unknown-unknown --release
 ```bash
 cd web && python3 -m http.server 8787   # dashboard at http://127.0.0.1:8787
 ```
+
+To recreate the whole demo from scratch on testnet under fresh account names —
+deploy, restrict the key, delete the full-access key, then run the attack:
+
+```bash
+./scripts/reproduce-demo.sh
+```
+
+## Tests
+
+Two layers, in **separate crates**, deliberately.
+
+```bash
+cd contract && cargo test            # 19 unit tests — fast, no network
+cd integration-tests && cargo test   # 7 sandbox tests — real NEAR node
+```
+
+**Unit tests** cover policy logic and authorization: the prompt-injected drain,
+daily-cap exhaustion, 24-hour window rollover, privilege-escalation attempts,
+and input validation.
+
+**Integration tests** cover what unit tests structurally cannot. A unit test
+cannot schedule a cross-contract transfer or run a callback, so the entire
+settlement path is invisible to it — including the refund logic that the
+reentrancy defense depends on. These run against a real sandbox node:
+
+| Test | What it proves |
+|---|---|
+| `allowed_spend_actually_transfers_value` | the payee's balance really increases |
+| `denied_spend_moves_no_value_and_is_recorded` | a denial moves nothing and is counted |
+| `failed_transfer_refunds_headroom` | a genuinely failing transfer restores the daily allowance |
+| `daily_cap_holds_across_settled_transfers` | the cap holds across real settled spends |
+| `owner_method_without_one_yocto_is_rejected` | the 1 yoctoNEAR gate actually blocks calls |
+| `agent_cannot_pause_or_widen_policy` | the agent cannot escalate its own privileges |
+| `kill_switch_stops_settled_spending` | pausing halts a working agent immediately |
+
+They live in their own crate because the sandbox downloads a node binary on
+first run and needs network access. `cd contract && cargo test` is the command
+the README promises, so it must never depend on a download — it stays at well
+under a second with no extra dependencies.
 
 The dashboard is one HTML file — no build step, no package manager. It reads
 live contract state and shows vault balance, each agent's policy, remaining
@@ -214,9 +254,11 @@ schedules a transfer only when allowed.
 ## Layout
 
 ```
-contract/src/lib.rs    the vault: policy, enforcement, events, 19 tests
-scripts/verify.py      on-chain verification, stdlib only
-web/index.html         dashboard, no build step
+contract/src/lib.rs           the vault: policy, enforcement, events, 19 unit tests
+integration-tests/            7 sandbox tests covering the settlement path
+scripts/verify.py             on-chain verification, stdlib only
+scripts/reproduce-demo.sh     recreate the whole demo on testnet
+web/index.html                dashboard, no build step
 ```
 
 Rust · near-sdk 5.30.1 · NEAR testnet · NEP-297 events

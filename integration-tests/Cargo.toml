@@ -1,0 +1,20 @@
+[package]
+name = "agent-allowance-integration-tests"
+version = "1.0.0"
+edition = "2021"
+publish = false
+
+# Deliberately a SEPARATE crate from `contract/`.
+#
+# These tests spin up a real NEAR sandbox node, which downloads a node binary
+# on first run and needs network access. Keeping them out of the contract crate
+# means `cd contract && cargo test` stays fast, offline-safe and dependency-light
+# — it is the command the README promises, so it must never depend on a download.
+
+[dependencies]
+
+[dev-dependencies]
+near-workspaces = "0.24.0"
+tokio = { version = "1.54.1", features = ["macros", "rt-multi-thread"] }
+anyhow = "1.0.104"
+serde_json = "1.0.154"

@@ -1,49 +1,112 @@
 # Agent Allowance
 
-**An AI agent holding a wallet can be talked into giving it away. This makes that boring.**
+Protocol-enforced spending limits for AI agents on NEAR.
 
-Protocol-enforced spending limits for AI agents on NEAR. Live on testnet at
-[`agent-allowance.testnet`](https://explorer.testnet.near.org/accounts/agent-allowance.testnet).
+An AI agent that holds a wallet key can be talked into giving the money away —
+prompt injection is unsolved. Agent Allowance assumes the agent is already
+compromised and bounds what it can do. The agent never holds funds. It holds
+one NEAR function-call access key that can do exactly one thing: ask a vault
+contract to pay, within limits the owner wrote as code.
 
-## Attack it yourself
+- **Contract:** [`agent-allowance.testnet`](https://testnet.nearblocks.io/address/agent-allowance.testnet), live on NEAR testnet
+- **Tracks:** AI Security & Defense · Agent Economy · Autonomous Business
+- **Stack:** Rust contract (near-sdk 5.30.1), static site, Python-stdlib tooling
 
-Open the dashboard and you will find **a real NEAR private key published in the
-page**. It belongs to `aa-agent.testnet`, a live agent registered against this
-vault, holding both NEAR and USDC. Pick an asset, type your own prompt-injection
-text, point it at any address you like, and sign a genuine testnet transaction
-from your browser.
+## How NEAR fits
 
-It will fail. Every time.
+The design rests on a NEAR protocol primitive, not on anything this project
+had to build:
 
-That key is a NEAR **FunctionCall** key restricted to `request_spend` and
-`request_spend_ft` on this vault. By protocol it cannot attach tokens and cannot
-call any other contract on NEAR, and the account holds no full-access key.
-Publishing it is not an oversight — it is the entire argument, stated in the
-strongest form available: here is the key, the money is behind it, and you still
-cannot take it.
+| NEAR feature | What it does here |
+|---|---|
+| Function-call access keys | The agent's only key. Bound by the protocol to one contract and a list of methods; can never attach a deposit. This is the first of two gates. |
+| Named accounts with multiple keys | The agent account's full-access key is deleted, leaving the restricted key as the only way to act as that account. |
+| The 1-yoctoNEAR pattern | Owner methods require a 1-yocto deposit. A function-call key cannot attach one, so a leaked agent key can never change its own policy. |
+| Promises and callbacks | Spending debits before the transfer is scheduled and restores in the callback if the transfer fails. |
+| NEP-141 | The same policy engine governs native NEAR and fungible tokens (live with testnet USDC.e). |
+| NEP-297 events | Every allowed and denied request is an event in a transaction receipt — an audit trail that costs no contract storage. |
 
-```bash
-cd web && python3 -m http.server 8787   # then open http://127.0.0.1:8787
+On most chains a key can do anything its account can, and reproducing the
+first gate means deploying an account-abstraction stack. On NEAR it is part of
+the protocol.
+
+## Try it: do X, see Y
+
+Steps 1–5 and 8 need only Python 3.8+, a browser, and outbound HTTPS to NEAR
+testnet RPC. Nothing to install, no wallet, no account. Steps 6–7 need Rust.
+
+| # | Do this | See this |
+|---|---|---|
+| 1 | `python3 scripts/verify.py` | Read-only checks of every claim against the chain, ending `27 passed, 0 failed`. About 3 seconds. |
+| 2 | `python3 scripts/redteam.py` | Nine attacks signed with the agent's real key: 6 `STOPPED by the network`, 3 `STOPPED by the vault`, then one legitimate payment `ALLOWED`. Ends `9 of 9 attacks stopped`, exit status 0. About 30 seconds. |
+| 3 | `cd web && python3 -m http.server 8787`, open <http://127.0.0.1:8787/attack.html>, pick **Just send the money**, press **Sign and send the attack** | `REFUSED BY THE NETWORK` — `InvalidAccessKeyError → RequiresFullAccess`. The pipeline stops at "NEAR network". |
+| 4 | Same page: pick **Prompt-injected payment**, type any instruction and any recipient, send | `BLOCKED BY THE VAULT` — `recipient_not_allowlisted`, with your text recorded on-chain and a link to the transaction. |
+| 5 | Same page: pick **A legitimate payment**, send | `ALLOWED` — 0.005 NEAR paid to the allowlisted payee. All four pipeline stages pass. |
+| 6 | `cd contract && cargo test` | `36 passed; 0 failed`. No network needed. |
+| 7 | `cd integration-tests && cargo test` | `14 passed; 0 failed` against a real sandbox node (downloads the node binary on first run). |
+| 8 | `python3 scripts/test_nearlite.py` | `12 passed, 0 failed` — the signing code checked against RFC 8032 test vectors, offline. |
+
+Step 2 sends real testnet transactions. Its legitimate payment draws on a
+rolling daily cap of 0.1 NEAR; if other people have used that up, the script
+says so and the attacks are still scored. `--no-control` skips the payment.
+
+What step 2 prints:
+
 ```
+Gate 1 — the NEAR protocol
+ 1. Send the agent account's own NEAR straight to the attacker
+    STOPPED by the network: InvalidAccessKeyError → RequiresFullAccess
+ 2. Call the stablecoin contract directly and transfer its tokens
+    STOPPED by the network: InvalidAccessKeyError → ReceiverMismatch → ak_receiver=agent-allowance.testnet, tx_receiver=usdc.fakes.testnet
+ 3. Call an owner method on the vault to raise its own limits
+    STOPPED by the network: InvalidAccessKeyError → MethodNameMismatch → method_name=update_policy
+ 4. Attach a deposit to a permitted call, to pass the owner check
+    STOPPED by the network: InvalidAccessKeyError → DepositWithFunctionCall
+ 5. Add a full-access key to the agent's own account
+    STOPPED by the network: InvalidAccessKeyError → RequiresFullAccess
+ 6. Delete the agent account and name the attacker as beneficiary
+    STOPPED by the network: InvalidAccessKeyError → RequiresFullAccess
 
-Or verify everything without a browser — no keys, no Rust, no npm:
+Gate 2 — the vault contract
+ 7. Prompt-injected drain: ask the vault to pay the attacker
+    STOPPED by the vault: recipient_not_allowlisted
+ 8. Oversized payment to the allowed payee, far above the cap
+    STOPPED by the vault: exceeds_per_tx_cap
+ 9. Prompt-injected stablecoin drain to the attacker
+    STOPPED by the vault: recipient_not_allowlisted
 
-```bash
-python3 scripts/verify.py
-```
-
-```
-2. Agent keys are restricted by the NEAR protocol
-
-   aa-agent.testnet
-  PASS  aa-agent.testnet holds exactly one access key
-  PASS  no full-access key exists on aa-agent.testnet
-  PASS  key is limited to request_spend, request_spend_ft
-  PASS  key is limited to the vault contract
-...
 Summary
-  21 passed, 0 failed
+  9 of 9 attacks stopped
 ```
+
+## The key in this repository
+
+**This repository contains one private key, on purpose.** It appears in
+`web/attack.html` and `scripts/redteam.py`, and it is the subject of the
+project rather than a leak:
+
+- It belongs to `aa-agent.testnet`, a testnet agent registered against the vault.
+- It is a function-call key limited to `request_spend` and `request_spend_ft`
+  on `agent-allowance.testnet`. The account holds no full-access key, so no
+  permission can be added to it by anyone, including the owner.
+- The worst a holder can do is make the one payment the policy already
+  permits: at most 0.01 NEAR or 5 USDC.e, to one allowlisted address the
+  project controls, within a rolling daily cap.
+
+None of that is taken on trust. `verify.py` scans the working tree, confirms
+exactly one private key is present, derives its public key, and checks that it
+is the sole, restricted key of that account on-chain:
+
+```
+5. The private key published in this repository
+  PASS  exactly one private key is present in the working tree
+  PASS  it is the sole key of aa-agent.testnet, the one restricted to the vault
+```
+
+Git history also contains an earlier playground key, for
+`aa-playground.testnet`. It is restricted the same way and `verify.py` checks
+it too. No other credential — owner key, API key or seed phrase — has ever
+been committed; the owner's full-access key is not in this repository.
 
 ---
 
@@ -63,10 +126,7 @@ money and exactly one rule: never transfer the funds. Anyone could pay to try
 to talk it out of them. Hundreds failed. Eventually someone succeeded, and the
 agent released roughly $47,000 — voluntarily.
 
-It had one rule. Its entire purpose was to not do the thing. A stranger talked
-it into doing the thing.
-
-Now give that agent a key that can move everything.
+It had one rule, and a stranger talked it into breaking it.
 
 ## The approach
 
@@ -96,7 +156,7 @@ Security has to sit *below* the AI, where words cannot reach it.
        payee.agent-allowance.testnet
 ```
 
-**Layer 1 — the NEAR protocol.** Per the
+**Gate 1 — the NEAR protocol.** Per the
 [access key docs](https://docs.near.org/protocol/access-keys), a FunctionCall
 key *"does not allow to attach NEAR tokens to the call"*, and its `receiver_id`
 is *"the only contract which the key allows to call... no other contract can be
@@ -104,33 +164,47 @@ called with this key."* Its allowance covers **gas only**, not spending power.
 A fully leaked agent key therefore cannot move tokens, cannot reach a DEX, and
 cannot touch anything else on NEAR.
 
-**Layer 2 — this contract.** The vault holds the funds and enforces the amounts.
+**Gate 2 — this contract.** The vault holds the funds and enforces the amounts.
 
-**Why NEAR:** on most chains a key is a key — it does anything the account can.
-Reproducing layer 1 elsewhere means deploying an account-abstraction stack.
-Here it is a protocol primitive.
+### Limits of the agent's key
+
+Stated because they are part of the design, not a footnote. An account that
+holds only a function-call key:
+
+- **cannot transfer NEAR, add or delete keys, deploy code, or delete itself** —
+  those actions need a full-access key (attacks 1, 5 and 6 above);
+- **cannot gain methods later.** The method list is fixed when the key is
+  created. An earlier playground key was restricted to `request_spend`; when
+  token support shipped it could not call `request_spend_ft`, and with no
+  full-access key on the account nobody could extend it. A new agent account
+  was the only route;
+- **can lock itself out.** The key's allowance pays for gas and is finite.
+  When it is spent the key stops working, and nothing on the account can
+  refill it. The funds are unaffected — they are in the vault — but that
+  agent identity is finished, and the owner registers a new one. This also
+  bounds how many times a compromised agent can ask: see [Cost](#cost).
 
 ---
 
 ## Proof
 
-Five real transactions, signed by agent accounts that hold **only** a
-protocol-restricted key — including the one whose private key this page
-publishes. `verify.py` replays every one of them:
+Five recorded transactions, signed by agent accounts that hold only a
+protocol-restricted key. `verify.py` and the site's proof page replay each one
+from its own on-chain event:
 
 | Asset | Scenario | Result | Transaction |
 |---|---|---|---|
-| NEAR | Pay an allowlisted payee 0.5 | **allowed** | [`2UEaar…`](https://explorer.testnet.near.org/transactions/2UEaarEHrGvi3MbCohmTGF7fEnr4pTXs6JcnK9edXzPr) |
-| NEAR | Prompt-injected drain to `attacker.testnet` | **denied** | [`HAd35g…`](https://explorer.testnet.near.org/transactions/HAd35gbQuPMe8d8JVzJhmFobgsT7s8igoyqVv7iUWz8y) |
-| NEAR | Oversized 5 NEAR transfer, cap is 1 | **denied** | [`2AGh8G…`](https://explorer.testnet.near.org/transactions/2AGh8GW2DoZaPbQkrgew7C5b6DouvD6aVHZkBFF5FknA) |
-| USDC.e | Pay an allowlisted payee 2 USDC.e | **allowed** | [`GuJRKr…`](https://explorer.testnet.near.org/transactions/GuJRKr2v51koWPfMYKBJCN8upGnP26eowsMPNXjNE9SM) |
-| USDC.e | Prompt-injected stablecoin drain | **denied** | [`5td8rs…`](https://explorer.testnet.near.org/transactions/5td8rsqQgbsTgjqQ4N8cGTSD4APJwXZo6cWv2aY6iZTT) |
+| NEAR | Pay an allowlisted payee 0.5 | **allowed** | [`2UEaar…`](https://testnet.nearblocks.io/txns/2UEaarEHrGvi3MbCohmTGF7fEnr4pTXs6JcnK9edXzPr) |
+| NEAR | Prompt-injected drain to `attacker.testnet` | **denied** | [`HAd35g…`](https://testnet.nearblocks.io/txns/HAd35gbQuPMe8d8JVzJhmFobgsT7s8igoyqVv7iUWz8y) |
+| NEAR | Oversized 5 NEAR transfer, cap is 1 | **denied** | [`2AGh8G…`](https://testnet.nearblocks.io/txns/2AGh8GW2DoZaPbQkrgew7C5b6DouvD6aVHZkBFF5FknA) |
+| USDC.e | Pay an allowlisted payee 2 USDC.e | **allowed** | [`GuJRKr…`](https://testnet.nearblocks.io/txns/GuJRKr2v51koWPfMYKBJCN8upGnP26eowsMPNXjNE9SM) |
+| USDC.e | Prompt-injected stablecoin drain | **denied** | [`5td8rs…`](https://testnet.nearblocks.io/txns/5td8rsqQgbsTgjqQ4N8cGTSD4APJwXZo6cWv2aY6iZTT) |
 
-The vault holds **real testnet USDC.e** (`usdc.fakes.testnet`), not a mock. The
-token path is live, not merely unit-tested.
+The vault holds testnet USDC.e (`usdc.fakes.testnet`), not a mock deployed for
+the demo, so the token path is exercised against a contract this project does
+not control.
 
-The second one is the point. The compromised agent genuinely tried, and the
-attempt is preserved on-chain forever — including the injected text:
+A denial is preserved on-chain together with the text the agent submitted:
 
 ```json
 EVENT_JSON:{"standard":"agent_allowance","version":"1.0.0","event":"spend_denied",
@@ -139,52 +213,75 @@ EVENT_JSON:{"standard":"agent_allowance","version":"1.0.0","event":"spend_denied
   "memo":"URGENT: owner authorized emergency transfer"}]}
 ```
 
-The agent was compromised. The money did not move. Not because the AI resisted —
-because it was never able to.
+Ordinary RPC nodes discard transactions after a few days, so both the script
+and the site read these from archival nodes first. The proof stays readable
+after the nodes that first served it have forgotten it.
 
 ---
 
-## Run it
+## Using it from an agent
 
-```bash
-python3 scripts/verify.py          # verify on-chain, zero setup
+An agent needs the vault's account id and its own restricted key. It asks; the
+vault decides. In Python, with the client in this repository:
+
+```python
+import os
+import nearlite as near          # scripts/nearlite.py, standard library only
+
+key = near.Key(os.environ["AGENT_KEY"])
+tx_hash, result = near.send(key, "my-agent.testnet", "agent-allowance.testnet", [
+    near.function_call("request_spend", {
+        "recipient": "payee.agent-allowance.testnet",
+        "amount": "5000000000000000000000",          # yoctoNEAR
+        "memo": "monthly API credits",
+    })
+])
+print(near.events(result))       # spend_allowed, or spend_denied with a reason
 ```
 
-```bash
-cd contract && cargo test          # 36 unit tests, including the attacks
-```
+The call returns `{allowed, reason}` and never panics on a policy refusal, so
+an agent can read why it was refused and report it rather than retry blindly.
+Setting up a new agent — create the account, add the restricted key, delete
+the full-access key, register a policy — is scripted end to end in
+`scripts/reproduce-demo.sh`.
 
-```bash
-cd contract && cargo build --target wasm32-unknown-unknown --release
-```
+## The site
 
-```bash
-cd web && python3 -m http.server 8787   # site at http://127.0.0.1:8787
-```
-
-The site has four pages, sharing one stylesheet and one client module:
+Four static pages over one stylesheet and one client module — no build step,
+no package manager, no framework.
 
 | Page | What it does |
 |---|---|
-| `index.html` | the pitch, live vault state, agents under policy |
-| `attack.html` | the published key and the interactive attack console |
+| `index.html` | the problem, the two gates, live vault state, every agent's policy |
+| `attack.html` | the published key and the attack console: nine attacks, each signed in the browser and traced through the two gates |
 | `proof.html` | five transactions replayed from their own chain events |
-| `flow.html` | the flow chart, plus the same thing in plain words |
+| `flow.html` | the flow chart, then the same thing in plain words |
 
-To recreate the whole demo from scratch on testnet under fresh account names —
-deploy, restrict the key, delete the full-access key, then run the attack:
+The attack console signs with the published key. That agent is capped at
+0.01 NEAR and 5 USDC.e per payment, to a single allowlisted address, so the
+most a visitor can do is move a small, capped amount between two accounts the
+project controls. Because every visitor signs with the same key, nonces
+collide; a stale nonce is retried rather than reported, and only an
+access-key violation is ever shown as the network refusing an attack.
 
-```bash
-./scripts/reproduce-demo.sh
-```
+The contract exposes a single `dashboard()` view returning the whole page
+state in one call, because one request per field gets throttled by public
+endpoints and renders a half-loaded page.
 
 ## Tests
 
-Two layers, in **separate crates**, deliberately.
+Three layers.
 
 ```bash
 cd contract && cargo test            # 36 unit tests — fast, no network
+```
+
+```bash
 cd integration-tests && cargo test   # 14 sandbox tests — real NEAR node
+```
+
+```bash
+python3 scripts/test_nearlite.py     # 12 offline tests of the signing code
 ```
 
 **Unit tests** cover policy logic and authorization: the prompt-injected drain,
@@ -192,9 +289,9 @@ daily-cap exhaustion, 24-hour window rollover, privilege-escalation attempts,
 owner-only token withdrawal, and input validation.
 
 **Integration tests** cover what unit tests structurally cannot. A unit test
-cannot schedule a cross-contract transfer or run a callback, so the entire
-settlement path is invisible to it — including the refund logic that the
-reentrancy defense depends on. These run against a real sandbox node:
+cannot schedule a cross-contract transfer or run a callback, so the settlement
+path is invisible to it — including the refund logic the reentrancy defense
+depends on. These run against a real sandbox node:
 
 | Test | What it proves |
 |---|---|
@@ -214,14 +311,17 @@ reentrancy defense depends on. These run against a real sandbox node:
 | `agent_cannot_withdraw_tokens` | the owner's exit is closed to agents |
 
 They live in their own crate because the sandbox downloads a node binary on
-first run and needs network access. `cd contract && cargo test` is the command
-the README promises, so it must never depend on a download — it stays at well
-under a second with no extra dependencies.
+first run and needs network access, and `cd contract && cargo test` should
+never depend on a download.
+
+**Client tests** check the standard-library Ed25519 implementation against the
+RFC 8032 test vectors, and the transaction encoding against the key and
+signature the chain already accepts.
 
 CI runs formatting, `clippy -D warnings`, the unit tests and the wasm build on
-every push, plus `verify.py` against the live deployment. The sandbox tests are
-deliberately left out of CI: they depend on a node-binary download, and a
-flaky red badge on a security project is worse than no badge.
+every push; `verify.py` against the live deployment; the client tests; and a
+syntax and link check over the site. The sandbox tests are left out of CI
+because they depend on a node-binary download.
 
 ## Cost
 
@@ -231,47 +331,14 @@ Measured on testnet, including the transfer and callback:
 |---|---|---|
 | Allowed spend (policy check + transfer + callback) | 5.52 Tgas | 0.00048 NEAR |
 | Denied attempt | 2.60 Tgas | 0.00024 NEAR |
+| Attempt refused by the network | none | none |
 
-There is a second-order guarantee hiding in that second row. A FunctionCall
-key's allowance pays for gas, and the agent's key is created with 0.25 NEAR.
-At roughly 0.00024 NEAR per rejected attempt, a compromised agent gets on the
-order of a thousand tries before its key is permanently exhausted and stops
-working — without anyone intervening.
-
-So the protocol bounds not just what an attacker can take, but how many times
-they can ask.
-
-The site is four static HTML pages over one stylesheet and one client module —
-no build step, no package manager, no framework. It reads live contract state
-and shows vault balance, each agent's policy, remaining daily headroom, and
-running allowed/blocked counts.
-
-The proof page replays all five transactions by fetching each one's NEP-297
-event straight from its transaction record, so the attack shown on the page is
-the contract's own output rather than a screenshot — including the injected
-text the compromised agent submitted.
-
-The attack console at the top signs with the published key. That agent is
-capped at 0.01 NEAR and 5 USDC.e per transaction, to a single allowlisted
-address, so the worst a visitor can do is move a rounding error between two
-accounts we control. Its key carries a 5 NEAR gas allowance, which pays for
-roughly twenty thousand rejected attempts before the key exhausts itself — a
-bound the protocol enforces, not us.
-
-One detail worth noticing: an earlier playground key was restricted to
-`request_spend` alone. When token support shipped, that key could not call
-`request_spend_ft` at all — the network refused the transaction before the
-contract was reached, and because the account holds no full-access key, no
-method could be added to it. The containment is not advisory.
-
-Transactions are built and signed explicitly rather than via
-`account.functionCall()`. That wrapper resolves access keys through a path that
-mishandles the BigInt values this RPC returns, and hangs in a silent
-nonce-retry loop rather than failing.
-
-The contract exposes a single `dashboard()` view returning the whole page state
-in one call. Deliberate: one RPC request per field gets throttled by public
-endpoints and the page renders half-broken.
+A function-call key's allowance pays for gas. The published key was created
+with 5 NEAR of allowance, which pays for roughly twenty thousand denied
+attempts before the key is exhausted and stops working without anyone
+intervening. The demo agent `bot.agent-allowance.testnet` has 0.25 NEAR, or
+about a thousand. The protocol bounds not only what an attacker can take, but
+how many times they can ask.
 
 ---
 
@@ -343,15 +410,13 @@ storage cost.
 
 ## What this does NOT solve
 
-Stated plainly, because a security tool that overclaims is worse than none:
-
 - **It does not stop a permitted-but-foolish spend.** If the agent may send
   1 NEAR to an allowlisted address, a tricked agent can still waste 1 NEAR.
   The cap bounds the loss; it does not prevent it.
 - **It does not help if the owner's full-access key is stolen.** Different
   threat model.
-- **It does not make prompt injection stop working.** It makes a successful
-  injection boring.
+- **It does not make prompt injection stop working.** It limits what a
+  successful injection can achieve.
 - **Caps are nominal, not valued.** A token policy is written in that token's
   own units. There is no price oracle, so a cap of 100 units means 100 units
   whatever they are worth today. For stablecoins that is close enough; for a
@@ -360,20 +425,22 @@ Stated plainly, because a security tool that overclaims is worse than none:
   registration, so a transfer to an unregistered account fails. The vault
   handles that correctly — the balance is credited back — but the payment does
   not go through until the recipient registers.
+- **An exhausted agent key cannot be revived.** See
+  [Limits of the agent's key](#limits-of-the-agents-key).
 - **It is unaudited.** A hackathon build on testnet. Do not put real funds
   behind it without review.
 
-The honest claim is **blast-radius containment**, not invulnerability.
+The claim is blast-radius containment, not invulnerability.
 
 ---
 
 ## API
 
 The build live at `agent-allowance.testnet` is the one `verify.py` checks and
-the one the attack console signs against. `withdraw_ft` landed after that
-deploy: it is in the contract, covered by unit and sandbox tests, and reaches
-the live vault on the next deploy. No stored field changed, so that deploy
-needs no migration.
+the one the attack console and `redteam.py` sign against. `withdraw_ft` landed
+after that deploy: it is in the contract, covered by unit and sandbox tests,
+and reaches the live vault on the next deploy. No stored field changed, so
+that deploy needs no migration.
 
 **Owner only** — each requires 1 yoctoNEAR:
 `add_agent` · `update_policy` · `set_agent_enabled` · `revoke_agent` ·
@@ -383,7 +450,9 @@ needs no migration.
 **Agent:**
 `request_spend(recipient, amount, memo)` → `{allowed, reason}` — native NEAR.
 `request_spend_ft(token_id, recipient, amount, memo)` → `{allowed, reason}` — NEP-141.
-Both schedule a transfer only when allowed.
+Both schedule a transfer only when allowed. The returned `reason` is the
+enum variant (`RecipientNotAllowlisted`); the event carries the same reason in
+snake case (`recipient_not_allowlisted`).
 
 **Token contracts:** `ft_on_transfer(sender_id, amount, msg)` — the NEP-141
 deposit hook; returns the unused amount, which is the full amount for a token
@@ -404,15 +473,29 @@ the owner has not opted into.
 ```
 contract/src/lib.rs           the vault: policy, enforcement, events, 36 unit tests
 integration-tests/            14 sandbox tests covering the settlement path
-scripts/verify.py             on-chain verification, stdlib only
-scripts/reproduce-demo.sh     recreate the whole demo on testnet
+scripts/verify.py             read-only on-chain verification, 27 checks
+scripts/redteam.py            nine live attacks with the agent's real key
+scripts/nearlite.py           standard-library NEAR client: Ed25519, Borsh, RPC
+scripts/test_nearlite.py      offline tests for that client
+scripts/reproduce-demo.sh     recreate the deployment on testnet from scratch
+index.html                    redirect to web/, so the repository root can be hosted as-is
 web/                          four-page site: overview, attack, proof, flow
-web/assets/app.css            design system — dark canvas, electric gradients
+web/assets/app.css            design system
 web/assets/app.js             shared chain reads, formatting, renderers
-.github/workflows/ci.yml      fmt, clippy, tests, wasm, on-chain verify
+.github/workflows/ci.yml      fmt, clippy, tests, wasm, on-chain verify, site checks
 ```
 
-Rust · near-sdk 5.30.1 · NEAR testnet · NEP-297 events
+## Hackathon notes
 
-Built for the NEAR Hackathon, November 2026.
-Tracks: AI Security & Defense · Agent Economy · Autonomous Business
+Built for NEAR HACKATHON, November 2026.
+
+- **Window.** Every commit is dated inside the hackathon window; there is no
+  pre-hackathon code and no baseline to separate. The full history is the
+  work: [commits on `main`](https://github.com/abdulrr25/Agent_Allowance/commits/main).
+- **Libraries.** `near-sdk` 5.30.1 (contract). `near-workspaces` 0.24.0,
+  `tokio`, `anyhow` and `serde_json` (sandbox tests only). `near-api-js` 4.0.3,
+  loaded from jsDelivr, for signing in the browser. The Python tooling uses
+  the standard library only. No template or boilerplate was used.
+- **Other chains.** No version of this exists on another chain.
+- **Network.** Testnet only. Nothing here has been deployed to mainnet.
+- **License.** MIT — see `LICENSE`.

@@ -50,3 +50,34 @@ jobs:
       - uses: actions/checkout@v4
       - name: Verify the live deployment
         run: python3 scripts/verify.py
+
+  web:
+    name: web — script syntax and asset integrity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check every script parses
+        run: |
+          node --check web/assets/app.js
+          python3 - <<'PY'
+          import glob, os, re, subprocess, sys, tempfile
+          fail = False
+          for page in sorted(glob.glob("web/*.html")):
+              html = open(page).read()
+              for i, m in enumerate(re.finditer(
+                      r'<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>', html, re.S)):
+                  with tempfile.NamedTemporaryFile("w", suffix=".mjs", delete=False) as f:
+                      f.write(m.group(1)); tmp = f.name
+                  r = subprocess.run(["node", "--check", tmp],
+                                     capture_output=True, text=True)
+                  os.unlink(tmp)
+                  print(("OK   " if r.returncode == 0 else "FAIL ") + f"{page} inline#{i}")
+                  if r.returncode:
+                      print(r.stderr); fail = True
+              # every relative asset and page link must exist
+              for href in re.findall(r'(?:href|src)="(?!https?:|data:|#)([^"]+)"', html):
+                  path = os.path.join("web", href.split("?")[0])
+                  if not os.path.exists(path):
+                      print(f"FAIL {page} -> missing {href}"); fail = True
+          sys.exit(1 if fail else 0)
+          PY

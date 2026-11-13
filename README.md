@@ -177,6 +177,11 @@ The dashboard is one HTML file — no build step, no package manager. It reads
 live contract state and shows vault balance, each agent's policy, remaining
 daily headroom, and running allowed/blocked counts.
 
+It also replays the three proof transactions by fetching each one's NEP-297
+event straight from its transaction record, so the attack shown on the page is
+the contract's own output rather than a screenshot — including the injected
+text the compromised agent submitted.
+
 The contract exposes a single `dashboard()` view returning the whole page state
 in one call. Deliberate: one RPC request per field gets throttled by public
 endpoints and the page renders half-broken.

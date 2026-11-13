@@ -64,7 +64,23 @@
   .err{color:var(--deny);font-family:var(--mono);font-size:13px}
   footer{margin-top:56px;padding-top:24px;border-top:1px solid var(--line);
     color:var(--dim);font-size:13px}
-  @media(max-width:560px){.val{font-size:20px}h1{font-size:24px}}
+  .proof{background:var(--panel);border:1px solid var(--line);
+    border-radius:10px;padding:18px;margin-bottom:12px}
+  .proof-top{display:flex;justify-content:space-between;align-items:flex-start;
+    gap:12px;flex-wrap:wrap;margin-bottom:10px}
+  .proof-title{font-weight:600;font-size:15px}
+  .ev{font-family:var(--mono);font-size:11.5px;line-height:1.75;
+    background:#0d0f13;border:1px solid var(--line);border-radius:7px;
+    padding:12px;margin-top:10px;white-space:pre-wrap;word-break:break-word;
+    color:var(--dim)}
+  .ev .k{color:var(--accent)}
+  .ev .deny{color:var(--deny);font-weight:700}
+  .ev .allow{color:var(--allow);font-weight:700}
+  .ev .memo{color:var(--warn)}
+  .livetag{font-size:11px;font-weight:600;letter-spacing:.4px;
+    text-transform:uppercase;color:var(--dim);margin-left:8px}
+  .livetag.on{color:var(--allow)}
+  @media(max-width:560px){.val{font-size:20px}h1{font-size:24px}.ev{font-size:10.5px}}
 </style>
 </head>
 <body>
@@ -84,32 +100,31 @@
 <h2>Agents under policy</h2>
 <div id="agents"><div class="card"><div class="label">Loading…</div></div></div>
 
-<h2>Proof on testnet</h2>
-<table>
-  <thead><tr><th>Scenario</th><th>Result</th><th>Transaction</th></tr></thead>
-  <tbody>
-    <tr>
-      <td>Pay allowlisted payee 0.5 NEAR</td>
-      <td><span class="tag a">ALLOWED</span></td>
-      <td><a target="_blank" rel="noopener" href="https://explorer.testnet.near.org/transactions/2UEaarEHrGvi3MbCohmTGF7fEnr4pTXs6JcnK9edXzPr">2UEaar…</a></td>
-    </tr>
-    <tr>
-      <td>Prompt-injected drain to <code>attacker.testnet</code><div class="note">memo: “URGENT: owner authorized emergency transfer”</div></td>
-      <td><span class="tag d">DENIED</span></td>
-      <td><a target="_blank" rel="noopener" href="https://explorer.testnet.near.org/transactions/HAd35gbQuPMe8d8JVzJhmFobgsT7s8igoyqVv7iUWz8y">HAd35g…</a></td>
-    </tr>
-    <tr>
-      <td>Oversized 5 NEAR transfer (cap is 1)</td>
-      <td><span class="tag d">DENIED</span></td>
-      <td><a target="_blank" rel="noopener" href="https://explorer.testnet.near.org/transactions/2AGh8GW2DoZaPbQkrgew7C5b6DouvD6aVHZkBFF5FknA">2AGh8G…</a></td>
-    </tr>
-  </tbody>
-</table>
+<h2>Proof on testnet<span class="livetag" id="livetag">reading chain…</span></h2>
+<div id="proofs">
+  <div class="proof"><div class="proof-top">
+    <span class="proof-title">Pay an allowlisted payee 0.5 NEAR</span>
+    <span class="tag a">ALLOWED</span></div>
+    <a target="_blank" rel="noopener" href="https://explorer.testnet.near.org/transactions/2UEaarEHrGvi3MbCohmTGF7fEnr4pTXs6JcnK9edXzPr">2UEaar…</a>
+    <div class="ev" id="ev0">loading event from chain…</div></div>
+  <div class="proof"><div class="proof-top">
+    <span class="proof-title">Prompt-injected drain to attacker.testnet</span>
+    <span class="tag d">DENIED</span></div>
+    <a target="_blank" rel="noopener" href="https://explorer.testnet.near.org/transactions/HAd35gbQuPMe8d8JVzJhmFobgsT7s8igoyqVv7iUWz8y">HAd35g…</a>
+    <div class="ev" id="ev1">loading event from chain…</div></div>
+  <div class="proof"><div class="proof-top">
+    <span class="proof-title">Oversized 5 NEAR transfer (cap is 1)</span>
+    <span class="tag d">DENIED</span></div>
+    <a target="_blank" rel="noopener" href="https://explorer.testnet.near.org/transactions/2AGh8GW2DoZaPbQkrgew7C5b6DouvD6aVHZkBFF5FknA">2AGh8G…</a>
+    <div class="ev" id="ev2">loading event from chain…</div></div>
+</div>
 <p class="note">
-  The agent account holds <strong>exactly one key</strong>, restricted by the NEAR
-  protocol to <code>request_spend</code> on this contract. It cannot attach a token
-  deposit and cannot call any other contract. Verify against the RPC yourself —
-  nothing here is taken on trust.
+  These are not screenshots or claims — each block above is the contract's own
+  NEP-297 event, fetched live from the transaction record. The agent account
+  holds <strong>exactly one key</strong>, restricted by the NEAR protocol to
+  <code>request_spend</code> on this contract: it cannot attach a token deposit
+  and cannot call any other contract. Run <code>python3 scripts/verify.py</code>
+  to check all of it yourself.
 </p>
 
 <footer>
@@ -209,7 +224,76 @@ async function load() {
   }
 }
 
+// ---- live proof events -------------------------------------------------
+// Each proof transaction's own NEP-297 event, read back from the chain, so the
+// claims on this page are evidence rather than assertion. Fetched once,
+// sequentially, to stay well inside public RPC rate limits.
+const PROOFS = [
+  "2UEaarEHrGvi3MbCohmTGF7fEnr4pTXs6JcnK9edXzPr",
+  "HAd35gbQuPMe8d8JVzJhmFobgsT7s8igoyqVv7iUWz8y",
+  "2AGh8GW2DoZaPbQkrgew7C5b6DouvD6aVHZkBFF5FknA",
+];
+const AGENT = "bot.agent-allowance.testnet";
+
+const esc = t => String(t).replace(/[&<>]/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[m]));
+
+async function txEvents(hash) {
+  for (const rpc of RPCS) {
+    try {
+      const res = await fetch(rpc, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tx", params: [hash, AGENT] })
+      });
+      if (!res.ok) continue;
+      const j = await res.json();
+      if (!j.result) continue;
+      return (j.result.receipts_outcome || [])
+        .flatMap(o => o.outcome.logs)
+        .filter(l => l.includes("EVENT_JSON:"))
+        .map(l => JSON.parse(l.split("EVENT_JSON:")[1]));
+    } catch (e) { /* try next endpoint */ }
+  }
+  return null;
+}
+
+function renderEvent(ev) {
+  const d = ev.data[0];
+  const denied = ev.event === "spend_denied";
+  const cls = denied ? "deny" : "allow";
+  let out = `<span class="k">event</span>    <span class="${cls}">${esc(ev.event)}</span>\n`;
+  if (d.reason) out += `<span class="k">reason</span>   <span class="${cls}">${esc(d.reason)}</span>\n`;
+  out += `<span class="k">agent</span>    ${esc(d.agent_id)}\n`;
+  out += `<span class="k">recipient</span> ${esc(d.recipient)}\n`;
+  out += `<span class="k">amount</span>   ${(Number(d.amount) / YOCTO).toFixed(2)} NEAR`;
+  if (d.memo) out += `\n<span class="k">memo</span>     <span class="memo">"${esc(d.memo)}"</span>`;
+  return out;
+}
+
+async function loadProofs() {
+  let ok = 0;
+  for (let i = 0; i < PROOFS.length; i++) {
+    const el = document.getElementById("ev" + i);
+    const events = await txEvents(PROOFS[i]);
+    if (events && events.length) {
+      el.innerHTML = events.map(renderEvent).join("\n");
+      ok++;
+    } else {
+      el.textContent = "could not reach RPC — open the transaction link instead";
+    }
+    await new Promise(r => setTimeout(r, 350));
+  }
+  const tag = document.getElementById("livetag");
+  if (ok === PROOFS.length) {
+    tag.textContent = "✓ read live from chain";
+    tag.className = "livetag on";
+  } else {
+    tag.textContent = "";
+  }
+}
+
 load();
+loadProofs();
 setInterval(load, 30000);
 </script>
 </body>

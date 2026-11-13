@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Offline tests for nearlite.py — no network, no dependencies.
+Offline tests for the Python tooling — no network, no dependencies.
 
     python3 scripts/test_nearlite.py
 
@@ -14,6 +14,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import nearlite as near  # noqa: E402
+import mcp_server  # noqa: E402
 
 # RFC 8032, section 7.1: (seed, public key, message, signature)
 RFC8032 = [
@@ -149,6 +150,46 @@ def an_invalid_nonce_error_is_recognised_and_nothing_else_is():
     assert near._invalid_nonce(refused) is None
     assert near._invalid_nonce("Timeout") is None
     assert near._invalid_nonce(None) is None
+
+
+@test
+def mcp_server_answers_the_handshake_and_lists_its_tools():
+    init = mcp_server.handle({"jsonrpc": "2.0", "id": 1, "method": "initialize"})
+    assert init["result"]["capabilities"] == {"tools": {}}
+    listed = mcp_server.handle({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
+    names = [t["name"] for t in listed["result"]["tools"]]
+    assert names == ["request_payment", "get_policy"]
+    for tool in listed["result"]["tools"]:
+        assert tool["inputSchema"]["type"] == "object"
+
+
+@test
+def mcp_server_ignores_notifications_and_rejects_unknown_calls():
+    assert mcp_server.handle({"jsonrpc": "2.0", "method": "notifications/initialized"}) is None
+    assert mcp_server.handle({"jsonrpc": "2.0", "id": 3, "method": "nope"})["error"]["code"] == -32601
+    bad = mcp_server.handle({"jsonrpc": "2.0", "id": 4, "method": "tools/call",
+                             "params": {"name": "no_such_tool"}})
+    assert bad["error"]["code"] == -32602
+
+
+@test
+def mcp_server_reports_a_bad_amount_as_a_tool_error_without_signing():
+    out = mcp_server.handle({"jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": {
+        "name": "request_payment", "arguments": {"recipient": "x.testnet", "amount": "abc"}}})
+    assert out["result"]["isError"] is True
+
+
+@test
+def amounts_convert_to_base_units_exactly():
+    assert mcp_server.to_units("0.005", 24) == 5 * 10**21
+    assert mcp_server.to_units("2", 6) == 2_000_000
+    assert mcp_server.to_units("123456789.123456", 6) == 123456789123456
+    for bad in ("0", "-1", "1e5", "0.0000001", "abc", ""):
+        try:
+            mcp_server.to_units(bad, 6)
+        except ValueError:
+            continue
+        raise AssertionError(f"{bad!r} was accepted")
 
 
 def main():

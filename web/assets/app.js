@@ -116,8 +116,8 @@ async function loadDashboard() {
     if (stats) {
       let cards = statCard("Available balance", fmt(d.available_balance, 24) + '<span class="u">NEAR</span>');
       for (const t of d.tokens)
-        cards += statCard(t.token_id.split(".")[0].toUpperCase() + " held",
-          fmt(t.balance, 6) + '<span class="u">' + t.token_id.split(".")[0] + '</span>');
+        cards += statCard(esc(t.token_id.split(".")[0].toUpperCase()) + " held",
+          fmt(t.balance, 6) + '<span class="u">' + esc(t.token_id.split(".")[0]) + '</span>');
       cards += statCard("Attempts blocked", d.total_denied);
       cards += statCard("Kill switch", d.paused
         ? '<span class="pill no">Paused</span>' : '<span class="pill ok">Active</span>', "sm");

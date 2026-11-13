@@ -156,8 +156,17 @@ cd contract && cargo build --target wasm32-unknown-unknown --release
 ```
 
 ```bash
-cd web && python3 -m http.server 8787   # dashboard at http://127.0.0.1:8787
+cd web && python3 -m http.server 8787   # site at http://127.0.0.1:8787
 ```
+
+The site has four pages, sharing one stylesheet and one client module:
+
+| Page | What it does |
+|---|---|
+| `index.html` | the pitch, live vault state, agents under policy |
+| `attack.html` | the published key and the interactive attack console |
+| `proof.html` | five transactions replayed from their own chain events |
+| `flow.html` | the flow chart, plus the same thing in plain words |
 
 To recreate the whole demo from scratch on testnet under fresh account names —
 deploy, restrict the key, delete the full-access key, then run the attack:
@@ -379,7 +388,9 @@ contract/src/lib.rs           the vault: policy, enforcement, events, 31 unit te
 integration-tests/            11 sandbox tests covering the settlement path
 scripts/verify.py             on-chain verification, stdlib only
 scripts/reproduce-demo.sh     recreate the whole demo on testnet
-web/index.html                dashboard, no build step
+web/                          four-page site: overview, attack, proof, flow
+web/assets/app.css            design system — dark canvas, electric gradients
+web/assets/app.js             shared chain reads, formatting, renderers
 .github/workflows/ci.yml      fmt, clippy, tests, wasm, on-chain verify
 ```
 

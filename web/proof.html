@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Proof — Agent Allowance</title>
+<link rel="stylesheet" href="assets/app.css">
+</head><body>
+<nav class="nav"><div class="nav-in">
+    <a class="brand" href="index.html"><span class="mark">A</span>Agent Allowance</a>
+    <div class="nav-links">
+      <a href="index.html">Overview</a>
+      <a href="attack.html">Attack it</a>
+      <a href="proof.html">Proof</a>
+      <a href="flow.html">How it works</a>
+      <a href="https://github.com/abdulrr25/Agent_Allowance" target="_blank" rel="noopener">GitHub ↗</a>
+    </div></div></nav>
+<main class="shell">
+  <div class="hero">
+    <span class="badge">Evidence, not screenshots</span>
+    <h1 style="margin-top:22px">Every claim, <span class="grad">checkable</span>.</h1>
+    <p class="lede">Each block below is the contract's own NEP-297 event, fetched live from
+      its transaction record. Nothing here is a picture of a result.</p>
+  </div>
+
+  <section>
+    <div class="sec">Five transactions on testnet <span class="live" id="livetag">reading chain…</span></div>
+    <div id="proofs"></div>
+  </section>
+
+  <section>
+    <div class="sec">Verify it yourself</div>
+    <div class="glass pad">
+      <h2>One command, nothing installed</h2>
+      <p class="muted">No keys, no Rust, no npm. It checks the agent holds exactly one key,
+      that the key is protocol-limited to this vault, reads the live policy, and replays all
+      five transactions.</p>
+      <div class="ev" style="margin-top:18px">python3 scripts/verify.py
+
+<span class="k">2. The agent's key is restricted by the NEAR protocol</span>
+  <span class="allow">PASS</span>  account holds exactly one access key
+  <span class="allow">PASS</span>  no full-access key exists on the agent account
+  <span class="allow">PASS</span>  key is limited to request_spend
+  <span class="allow">PASS</span>  key is limited to the vault contract
+  …
+<span class="k">Summary</span>
+  12 passed, 0 failed</div>
+      <div class="btn-row" style="margin-top:22px">
+        <a class="btn ghost" href="https://github.com/abdulrr25/Agent_Allowance" target="_blank" rel="noopener">Read the source ↗</a>
+        <a class="btn" href="attack.html">Attack it yourself →</a>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec">What this does not solve</div>
+    <div class="glass pad">
+      <p class="muted" style="max-width:74ch">Stated plainly, because a security tool that
+      overclaims is worse than none.</p>
+      <div class="rows" style="margin-top:16px">
+        <div class="row"><span class="k">Permitted but foolish spends</span><span class="v">not prevented — only bounded</span></div>
+        <div class="row"><span class="k">A stolen owner key</span><span class="v">different threat model</span></div>
+        <div class="row"><span class="k">Prompt injection itself</span><span class="v">still works; it just achieves little</span></div>
+        <div class="row"><span class="k">Token caps</span><span class="v">nominal units, no price oracle</span></div>
+        <div class="row"><span class="k">Audit status</span><span class="v">unaudited testnet build</span></div>
+      </div>
+    </div>
+  </section>
+</main>
+<footer class="shell"><span>Live on NEAR testnet · <code>agent-allowance.testnet</code></span>
+  <span id="updated">—</span></footer>
+<script src="assets/app.js"></script>
+<script>loadProofs();</script>
+</body></html>

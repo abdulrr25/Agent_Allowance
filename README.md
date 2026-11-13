@@ -33,14 +33,16 @@ python3 scripts/verify.py
 ```
 
 ```
-2. The agent's key is restricted by the NEAR protocol
-  PASS  account holds exactly one access key
-  PASS  no full-access key exists on the agent account
-  PASS  key is limited to request_spend
+2. Agent keys are restricted by the NEAR protocol
+
+   aa-agent.testnet
+  PASS  aa-agent.testnet holds exactly one access key
+  PASS  no full-access key exists on aa-agent.testnet
+  PASS  key is limited to request_spend, request_spend_ft
   PASS  key is limited to the vault contract
 ...
 Summary
-  12 passed, 0 failed
+  21 passed, 0 failed
 ```
 
 ---
@@ -112,8 +114,9 @@ Here it is a protocol primitive.
 
 ## Proof
 
-Three real transactions, signed by an agent account that holds **only** the
-restricted key:
+Five real transactions, signed by agent accounts that hold **only** a
+protocol-restricted key — including the one whose private key this page
+publishes. `verify.py` replays every one of them:
 
 | Asset | Scenario | Result | Transaction |
 |---|---|---|---|
@@ -148,7 +151,7 @@ python3 scripts/verify.py          # verify on-chain, zero setup
 ```
 
 ```bash
-cd contract && cargo test          # 31 unit tests, including the attacks
+cd contract && cargo test          # 36 unit tests, including the attacks
 ```
 
 ```bash
@@ -180,13 +183,13 @@ deploy, restrict the key, delete the full-access key, then run the attack:
 Two layers, in **separate crates**, deliberately.
 
 ```bash
-cd contract && cargo test            # 31 unit tests — fast, no network
-cd integration-tests && cargo test   # 11 sandbox tests — real NEAR node
+cd contract && cargo test            # 36 unit tests — fast, no network
+cd integration-tests && cargo test   # 14 sandbox tests — real NEAR node
 ```
 
 **Unit tests** cover policy logic and authorization: the prompt-injected drain,
 daily-cap exhaustion, 24-hour window rollover, privilege-escalation attempts,
-and input validation.
+owner-only token withdrawal, and input validation.
 
 **Integration tests** cover what unit tests structurally cannot. A unit test
 cannot schedule a cross-contract transfer or run a callback, so the entire
@@ -206,6 +209,9 @@ reentrancy defense depends on. These run against a real sandbox node:
 | `unknown_token_deposit_is_refunded` | an unknown token is handed back and creates no state |
 | `failed_token_transfer_restores_held_balance` | a failing `ft_transfer` credits the balance back |
 | `token_drain_to_unlisted_recipient_is_blocked` | the allowlist governs tokens as it governs NEAR |
+| `failed_owner_ft_withdrawal_restores_held_balance` | the owner's exit refunds correctly when a transfer fails |
+| `removed_token_is_still_withdrawable_by_the_owner` | removing a token never strands the balance already held |
+| `agent_cannot_withdraw_tokens` | the owner's exit is closed to agents |
 
 They live in their own crate because the sandbox downloads a node binary on
 first run and needs network access. `cd contract && cargo test` is the command
@@ -235,11 +241,12 @@ working — without anyone intervening.
 So the protocol bounds not just what an attacker can take, but how many times
 they can ask.
 
-The dashboard is one HTML file — no build step, no package manager. It reads
-live contract state and shows vault balance, each agent's policy, remaining
-daily headroom, and running allowed/blocked counts.
+The site is four static HTML pages over one stylesheet and one client module —
+no build step, no package manager, no framework. It reads live contract state
+and shows vault balance, each agent's policy, remaining daily headroom, and
+running allowed/blocked counts.
 
-It also replays the three proof transactions by fetching each one's NEP-297
+The proof page replays all five transactions by fetching each one's NEP-297
 event straight from its transaction record, so the attack shown on the page is
 the contract's own output rather than a screenshot — including the injected
 text the compromised agent submitted.
@@ -289,6 +296,11 @@ different door.
 **The held balance is debited before `ft_transfer` is scheduled** and credited
 back in the callback if it fails, exactly as on the native path. There is a
 sandbox test where the transfer genuinely fails and the balance comes back.
+
+**The owner has an exit that does not depend on an agent.** `withdraw_ft` moves
+a held token balance out under the same 1-yoctoNEAR gate as every other owner
+method, and keeps working after a token is removed — so revoking a token stops
+new deposits without stranding the balance already in the vault.
 
 Adding this changed the contract's stored layout, so the upgrade ships with a
 `migrate` method that carries agents, counters and the kill switch across
@@ -359,8 +371,8 @@ The honest claim is **blast-radius containment**, not invulnerability.
 
 **Owner only** — each requires 1 yoctoNEAR:
 `add_agent` · `update_policy` · `set_agent_enabled` · `revoke_agent` ·
-`set_paused` · `withdraw` · `add_token` · `remove_token` · `set_ft_policy` ·
-`revoke_ft_policy`
+`set_paused` · `withdraw` · `withdraw_ft` · `add_token` · `remove_token` ·
+`set_ft_policy` · `revoke_ft_policy`
 
 **Agent:**
 `request_spend(recipient, amount, memo)` → `{allowed, reason}` — native NEAR.
@@ -384,8 +396,8 @@ the owner has not opted into.
 ## Layout
 
 ```
-contract/src/lib.rs           the vault: policy, enforcement, events, 31 unit tests
-integration-tests/            11 sandbox tests covering the settlement path
+contract/src/lib.rs           the vault: policy, enforcement, events, 36 unit tests
+integration-tests/            14 sandbox tests covering the settlement path
 scripts/verify.py             on-chain verification, stdlib only
 scripts/reproduce-demo.sh     recreate the whole demo on testnet
 web/                          four-page site: overview, attack, proof, flow

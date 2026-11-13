@@ -465,7 +465,8 @@ impl Contract {
         );
     }
 
-    /// Stop accepting a token. Any balance already held stays withdrawable.
+    /// Stop accepting a token. Any balance already held remains in the vault
+    /// and can still be withdrawn by the owner with `withdraw_ft`.
     #[payable]
     pub fn remove_token(&mut self, token_id: AccountId) {
         self.assert_owner();
@@ -474,6 +475,59 @@ impl Contract {
             "token_removed",
             near_sdk::serde_json::json!({ "token_id": token_id }),
         );
+    }
+
+    /// Withdraw fungible tokens from the vault. Owner only.
+    ///
+    /// The vault accepts NEP-141 deposits, so the owner must have a way out
+    /// that does not depend on an agent policy. Works for tokens that have
+    /// since been removed, so stopping acceptance never strands a balance.
+    /// Debits before the transfer is scheduled and credits back in the
+    /// callback on failure, the same discipline as every outbound path here.
+    #[payable]
+    pub fn withdraw_ft(&mut self, token_id: AccountId, amount: U128, to: AccountId) -> Promise {
+        self.assert_owner();
+        let held = self.ft_balances.get(&token_id).map(|b| b.0).unwrap_or(0);
+        require!(amount.0 > 0, "amount must be positive");
+        require!(amount.0 <= held, "amount exceeds held balance");
+        self.ft_balances
+            .insert(token_id.clone(), U128(held.saturating_sub(amount.0)));
+        emit_event(
+            "owner_ft_withdrawal",
+            near_sdk::serde_json::json!({
+                "token_id": token_id, "to": to, "amount": amount,
+            }),
+        );
+        ext_ft::ext(token_id.clone())
+            .with_attached_deposit(NearToken::from_yoctonear(1))
+            .with_static_gas(FT_TRANSFER_GAS)
+            .ft_transfer(to, amount, None)
+            .then(
+                Self::ext(env::current_account_id())
+                    .with_static_gas(FT_CALLBACK_GAS)
+                    .on_ft_withdraw_complete(token_id, amount),
+            )
+    }
+
+    /// Credits the held balance back if an owner withdrawal failed.
+    #[private]
+    pub fn on_ft_withdraw_complete(
+        &mut self,
+        token_id: AccountId,
+        amount: U128,
+        #[callback_result] result: Result<(), PromiseError>,
+    ) -> bool {
+        if result.is_ok() {
+            return true;
+        }
+        let held = self.ft_balances.get(&token_id).map(|b| b.0).unwrap_or(0);
+        self.ft_balances
+            .insert(token_id.clone(), U128(held.saturating_add(amount.0)));
+        emit_event(
+            "owner_ft_withdrawal_reverted",
+            near_sdk::serde_json::json!({ "token_id": token_id, "amount": amount }),
+        );
+        false
     }
 
     /// Set an agent's spending policy for one token. Owner only.
@@ -1425,6 +1479,66 @@ mod tests {
             U128(1),
             U128(1),
             vec![allowed_payee()],
+        );
+    }
+
+    // ------------------------------------------------- owner token withdrawal
+
+    /// The vault takes NEP-141 deposits, so the owner must be able to take
+    /// them out again. Without this the only exit is an agent policy, which
+    /// would strand every token the vault was ever sent.
+    #[test]
+    fn owner_can_withdraw_tokens() {
+        let mut c = setup_ft();
+        testing_env!(ctx(owner(), ONE_YOCTO, 0));
+        let _ = c.withdraw_ft(token(), U128(40), owner());
+        assert_eq!(
+            c.ft_balance(token()).0,
+            60,
+            "held balance debited before transfer"
+        );
+    }
+
+    /// Removing a token stops new deposits; it must not strand the balance.
+    #[test]
+    fn removed_token_balance_is_still_withdrawable() {
+        let mut c = setup_ft();
+        testing_env!(ctx(owner(), ONE_YOCTO, 0));
+        c.remove_token(token());
+        assert!(!c.list_tokens().contains(&token()));
+        let _ = c.withdraw_ft(token(), U128(100), owner());
+        assert_eq!(c.ft_balance(token()).0, 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "amount exceeds held balance")]
+    fn owner_cannot_withdraw_more_tokens_than_held() {
+        let mut c = setup_ft();
+        testing_env!(ctx(owner(), ONE_YOCTO, 0));
+        let _ = c.withdraw_ft(token(), U128(101), owner());
+    }
+
+    #[test]
+    #[should_panic(expected = "owner only")]
+    fn agent_cannot_withdraw_tokens() {
+        let mut c = setup_ft();
+        testing_env!(ctx(agent(), ONE_YOCTO, 0));
+        let _ = c.withdraw_ft(token(), U128(1), attacker());
+    }
+
+    #[test]
+    fn failed_ft_withdrawal_restores_held_balance() {
+        let mut c = setup_ft();
+        testing_env!(ctx(owner(), ONE_YOCTO, 0));
+        let _ = c.withdraw_ft(token(), U128(40), owner());
+        assert_eq!(c.ft_balance(token()).0, 60);
+
+        testing_env!(ctx(accounts(5), NearToken::from_yoctonear(0), 0));
+        c.on_ft_withdraw_complete(token(), U128(40), Err(PromiseError::Failed));
+        assert_eq!(
+            c.ft_balance(token()).0,
+            100,
+            "a failed withdrawal must credit the balance back"
         );
     }
 

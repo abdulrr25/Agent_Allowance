@@ -457,6 +457,130 @@ async fn failed_token_transfer_restores_held_balance() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// The owner's own way out carries the same discipline as an agent spend: the
+/// held balance is debited before `ft_transfer` is scheduled, so a transfer
+/// that fails must credit it back. Unit tests cannot run that callback.
+#[tokio::test]
+async fn failed_owner_ft_withdrawal_restores_held_balance() -> anyhow::Result<()> {
+    let f = setup().await?;
+    let token = setup_ft(&f).await?;
+
+    token
+        .call(f.vault.id(), "ft_on_transfer")
+        .args_json(json!({ "sender_id": f.owner.id(), "amount": "100", "msg": "" }))
+        .max_gas()
+        .transact()
+        .await?
+        .into_result()?;
+
+    f.owner
+        .call(f.vault.id(), "withdraw_ft")
+        .args_json(json!({
+            "token_id": token.id(),
+            "amount": "40",
+            "to": f.owner.id(),
+        }))
+        .deposit(one_yocto())
+        .max_gas()
+        .transact()
+        .await?
+        .into_result()?;
+
+    let bal: String = f
+        .vault
+        .view("ft_balance")
+        .args_json(json!({ "token_id": token.id() }))
+        .await?
+        .json()?;
+    assert_eq!(
+        bal, "100",
+        "a failed owner withdrawal must credit the held balance back"
+    );
+    Ok(())
+}
+
+/// Removing a token must stop new deposits without stranding the balance the
+/// vault already holds — the owner can still withdraw it afterwards.
+#[tokio::test]
+async fn removed_token_is_still_withdrawable_by_the_owner() -> anyhow::Result<()> {
+    let f = setup().await?;
+    let token = setup_ft(&f).await?;
+
+    token
+        .call(f.vault.id(), "ft_on_transfer")
+        .args_json(json!({ "sender_id": f.owner.id(), "amount": "100", "msg": "" }))
+        .max_gas()
+        .transact()
+        .await?
+        .into_result()?;
+
+    f.owner
+        .call(f.vault.id(), "remove_token")
+        .args_json(json!({ "token_id": token.id() }))
+        .deposit(one_yocto())
+        .max_gas()
+        .transact()
+        .await?
+        .into_result()?;
+
+    let out = f
+        .owner
+        .call(f.vault.id(), "withdraw_ft")
+        .args_json(json!({
+            "token_id": token.id(),
+            "amount": "100",
+            "to": f.owner.id(),
+        }))
+        .deposit(one_yocto())
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(
+        out.is_success(),
+        "a removed token must still be withdrawable by the owner"
+    );
+    Ok(())
+}
+
+/// An agent must not be able to reach the owner's withdrawal path, even with
+/// a yoctoNEAR attached — which a FunctionCall key cannot do in any case.
+#[tokio::test]
+async fn agent_cannot_withdraw_tokens() -> anyhow::Result<()> {
+    let f = setup().await?;
+    let token = setup_ft(&f).await?;
+
+    token
+        .call(f.vault.id(), "ft_on_transfer")
+        .args_json(json!({ "sender_id": f.owner.id(), "amount": "100", "msg": "" }))
+        .max_gas()
+        .transact()
+        .await?
+        .into_result()?;
+
+    let out = f
+        .agent
+        .call(f.vault.id(), "withdraw_ft")
+        .args_json(json!({
+            "token_id": token.id(),
+            "amount": "100",
+            "to": f.agent.id(),
+        }))
+        .deposit(one_yocto())
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(out.is_failure(), "only the owner may withdraw tokens");
+
+    let bal: String = f
+        .vault
+        .view("ft_balance")
+        .args_json(json!({ "token_id": token.id() }))
+        .await?
+        .json()?;
+    assert_eq!(bal, "100", "no tokens may move on a refused withdrawal");
+    Ok(())
+}
+
 /// A compromised agent aiming tokens at an unlisted address moves nothing.
 #[tokio::test]
 async fn token_drain_to_unlisted_recipient_is_blocked() -> anyhow::Result<()> {

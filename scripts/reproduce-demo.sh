@@ -2,9 +2,12 @@
 #
 # Recreate the entire Agent Allowance demo from scratch on NEAR testnet.
 #
-# This is the exact sequence that produced the transactions cited in the
-# README. It creates its own freshly-named accounts, so running it does not
-# touch the existing deployment and can be repeated.
+# This is the exact sequence that produced the three native-NEAR transactions
+# cited in the README — deploy, restrict the key, delete the full-access key,
+# then spend and attack. The two stablecoin transactions need a funded NEP-141
+# token account, so they are not recreated here. It creates its own
+# freshly-named accounts, so running it does not touch the existing deployment
+# and can be repeated.
 #
 #   ./scripts/reproduce-demo.sh
 #

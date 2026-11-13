@@ -2,6 +2,8 @@
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Proof — Agent Allowance</title>
+<meta name="description" content="Five real NEAR testnet transactions, each replayed live from its own on-chain NEP-297 event. Evidence, not screenshots.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%238b5cf6'/%3E%3Cstop offset='1' stop-color='%2322d3ee'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='8' fill='url(%23g)'/%3E%3Ctext x='16' y='23' font-family='monospace' font-size='19' font-weight='700' text-anchor='middle' fill='%230b0514'%3EA%3C/text%3E%3C/svg%3E">
 <link rel="stylesheet" href="assets/app.css">
 </head><body>
 <nav class="nav"><div class="nav-in">
@@ -30,19 +32,22 @@
     <div class="sec">Verify it yourself</div>
     <div class="glass pad">
       <h2>One command, nothing installed</h2>
-      <p class="muted">No keys, no Rust, no npm. It checks the agent holds exactly one key,
-      that the key is protocol-limited to this vault, reads the live policy, and replays all
-      five transactions.</p>
+      <p class="muted">No keys, no Rust, no npm. It checks that each agent holds exactly one
+      key — the published one included — that those keys are protocol-limited to this vault,
+      reads the live policy, confirms the vault really holds the stablecoin it governs, and
+      replays all five transactions. Twenty-one checks, none of them ours to fake.</p>
       <div class="ev" style="margin-top:18px">python3 scripts/verify.py
 
-<span class="k">2. The agent's key is restricted by the NEAR protocol</span>
-  <span class="allow">PASS</span>  account holds exactly one access key
-  <span class="allow">PASS</span>  no full-access key exists on the agent account
-  <span class="allow">PASS</span>  key is limited to request_spend
+<span class="k">2. Agent keys are restricted by the NEAR protocol</span>
+
+   aa-agent.testnet
+  <span class="allow">PASS</span>  aa-agent.testnet holds exactly one access key
+  <span class="allow">PASS</span>  no full-access key exists on aa-agent.testnet
+  <span class="allow">PASS</span>  key is limited to request_spend, request_spend_ft
   <span class="allow">PASS</span>  key is limited to the vault contract
   …
 <span class="k">Summary</span>
-  12 passed, 0 failed</div>
+  21 passed, 0 failed</div>
       <div class="btn-row" style="margin-top:22px">
         <a class="btn ghost" href="https://github.com/abdulrr25/Agent_Allowance" target="_blank" rel="noopener">Read the source ↗</a>
         <a class="btn" href="attack.html">Attack it yourself →</a>

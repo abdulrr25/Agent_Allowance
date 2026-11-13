@@ -2,6 +2,8 @@
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Attack it — Agent Allowance</title>
+<meta name="description" content="A real NEAR private key, published on purpose. Try to steal the vault's money with it — every attempt is a genuine signed testnet transaction.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%238b5cf6'/%3E%3Cstop offset='1' stop-color='%2322d3ee'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='8' fill='url(%23g)'/%3E%3Ctext x='16' y='23' font-family='monospace' font-size='19' font-weight='700' text-anchor='middle' fill='%230b0514'%3EA%3C/text%3E%3C/svg%3E">
 <link rel="stylesheet" href="assets/app.css">
 </head><body>
 <nav class="nav"><div class="nav-in">
@@ -34,10 +36,10 @@
           it. That is why publishing it is safe — and why it is the whole argument.</span>
       </div>
 
-      <label>Asset to steal</label>
-      <div class="seg" id="seg">
-        <button data-asset="near" class="sel">NEAR</button>
-        <button data-asset="usdc">USDC.e</button>
+      <label id="assetlabel">Asset to steal</label>
+      <div class="seg" id="seg" role="group" aria-labelledby="assetlabel">
+        <button type="button" data-asset="near" class="sel">NEAR</button>
+        <button type="button" data-asset="usdc">USDC.e</button>
       </div>
 
       <div class="field">
@@ -57,7 +59,7 @@
         <button class="btn good" id="legit" disabled style="flex:1">Send a legitimate payment</button>
       </div>
 
-      <div class="ev" id="out" style="margin-top:22px">Awaiting your attempt…</div>
+      <div class="ev" id="out" role="status" aria-live="polite" style="margin-top:22px">Awaiting your attempt…</div>
       <p class="muted" id="caps" style="margin-top:16px">Reading the live policy from chain…</p>
     </div>
   </section>
@@ -109,14 +111,36 @@ async function initSigner(){
   }
 }
 
+/** Parse a decimal amount into exact integer base units. String arithmetic,
+ *  not floats, so a long or large amount cannot lose precision on its way to
+ *  the chain — and a typo gets a readable message instead of a BigInt error. */
+function toUnits(str,dec){
+  if(!/^\d+(\.\d+)?$/.test(str))
+    throw new Error(`"${str}" is not a valid amount. Enter a positive number, for example 0.005.`);
+  const [whole,frac=""]=str.split(".");
+  if(frac.length>dec)
+    throw new Error(`Too many decimal places — this asset has ${dec}.`);
+  const units=BigInt(whole+frac.padEnd(dec,"0"));
+  if(units===0n) throw new Error("Enter an amount greater than zero.");
+  return units;
+}
+
 async function send(recipient,amountStr,memo){
   const out=document.getElementById("out");
   const a=document.getElementById("attack"),l=document.getElementById("legit");
+  const cfg=ASSETS[asset];
+  let units;
+  try{
+    if(!/^[a-z0-9._-]{2,64}$/.test(recipient))
+      throw new Error(`"${recipient}" is not a valid NEAR account id — lowercase letters, digits and . _ - only.`);
+    units=toUnits(amountStr,cfg.dec);
+  }catch(e){
+    out.innerHTML=`<span class="err">${esc(e.message)}</span>`;
+    return;
+  }
   a.disabled=l.disabled=true;
   out.innerHTML='<span class="spin"></span><span class="k">signing and broadcasting to NEAR testnet…\nan allowed spend also waits for the transfer and callback to settle.</span>';
   try{
-    const cfg=ASSETS[asset];
-    const units=BigInt(Math.round(Number(amountStr)*1e6))*(10n**BigInt(cfg.dec-6));
     const args=cfg.token
       ?{token_id:cfg.token,recipient,amount:units.toString(),memo}
       :{recipient,amount:units.toString(),memo};
@@ -154,7 +178,12 @@ async function showCaps(){
       ` per transaction, to one allowlisted address only — and it has blocked `+
       `<strong>${d.total_denied}</strong> attempts so far. Change the recipient, raise the `+
       `amount, or rewrite the instruction however you like; the outcome will not change.`;
-  }catch(e){}
+    stamp();
+  }catch(e){
+    document.getElementById("caps").innerHTML=
+      `<span class="err">Could not read the live policy: ${esc(e.message)}</span>`;
+    stamp("could not reach RPC");
+  }
 }
 
 document.getElementById("seg").onclick=e=>{

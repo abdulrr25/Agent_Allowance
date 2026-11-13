@@ -30,6 +30,12 @@ const fmt = (v, d) => (Number(v) / 10 ** d).toLocaleString(undefined,
   { maximumFractionDigits: d > 6 ? 3 : 2 });
 const short = h => h.slice(0, 8) + "…";
 
+/** Stamp the footer with the time of the last successful chain read. */
+function stamp(text) {
+  const el = document.getElementById("updated");
+  if (el) el.textContent = text || "updated " + new Date().toLocaleTimeString();
+}
+
 /** POST to NEAR RPC, falling back to a second endpoint. Public endpoints
  *  throttle bursts, so a refusal is retried elsewhere rather than surfaced. */
 async function rpc(payload) {
@@ -87,18 +93,18 @@ function assetBlock(name, dec, p, remaining) {
     <div class="rows">
       <div class="row"><span class="k">Per-transaction cap</span><span class="v">${fmt(p.per_tx_cap, dec)}</span></div>
       <div class="row"><span class="k">Daily cap</span><span class="v">${fmt(p.daily_cap, dec)}</span></div>
-      <div class="row"><span class="k">Allowed recipients</span><span class="v">${p.allowlist.join(", ")}</span></div>
+      <div class="row"><span class="k">Allowed recipients</span><span class="v">${p.allowlist.map(esc).join(", ")}</span></div>
       <div class="row"><span class="k">Remaining today</span><span class="v">${fmt(remaining, dec)} / ${fmt(p.daily_cap, dec)}</span></div>
     </div>
     <div class="bar"><i style="width:${used}%"></i></div></div>`;
 }
 
 const renderAgent = s => `<div class="glass pad">
-  <div class="aid">${s.agent_id}</div>
+  <div class="aid">${esc(s.agent_id)}</div>
   <div style="margin-bottom:18px">${s.policy.enabled
     ? '<span class="pill ok">Enabled</span>' : '<span class="pill no">Disabled</span>'}</div>
   ${assetBlock("NEAR", 24, s.policy, s.remaining_today)}
-  ${(s.tokens || []).map(t => assetBlock(t.token_id, 6, t.policy, t.remaining_today)).join("")}
+  ${(s.tokens || []).map(t => assetBlock(esc(t.token_id), 6, t.policy, t.remaining_today)).join("")}
 </div>`;
 
 /** Paint vault stats and agent cards into whichever containers exist. */
@@ -120,12 +126,12 @@ async function loadDashboard() {
     if (agents) agents.innerHTML = d.agents.length
       ? d.agents.map(renderAgent).join("")
       : '<div class="glass pad"><span class="muted">No agents registered</span></div>';
-    const stamp = document.getElementById("updated");
-    if (stamp) stamp.textContent = "updated " + new Date().toLocaleTimeString();
+    stamp();
     return d;
   } catch (e) {
     if (stats) stats.innerHTML =
       `<div class="glass pad"><span class="err">Could not reach NEAR RPC: ${esc(e.message)}</span></div>`;
+    stamp("could not reach RPC");
     return null;
   }
 }
@@ -151,7 +157,7 @@ async function loadProofs(containerId = "proofs", tagId = "livetag") {
       const evs = eventsFrom(r);
       if (evs.length) { el.innerHTML = evs.map(renderEvent).join("\n"); ok++; }
       else el.textContent = "no events found";
-    } catch (e) { el.textContent = "could not reach RPC — open the transaction link instead"; }
+    } catch { el.textContent = "could not reach RPC — open the transaction link instead"; }
     await new Promise(r => setTimeout(r, 320));
   }
   const tag = document.getElementById(tagId);
@@ -159,6 +165,7 @@ async function loadProofs(containerId = "proofs", tagId = "livetag") {
     if (ok === PROOFS.length) { tag.textContent = "✓ read live from chain"; tag.className = "live on"; }
     else tag.textContent = "";
   }
+  stamp(ok ? null : "could not reach RPC");
 }
 
 /** Mark the current page in the nav. */

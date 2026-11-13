@@ -16,15 +16,24 @@ import urllib.request
 RPCS = ["https://rpc.testnet.near.org", "https://test.rpc.fastnear.com"]
 VAULT = "agent-allowance.testnet"
 AGENT = "bot.agent-allowance.testnet"
+# The agent whose private key is published on the attack page. Everything the
+# site claims about that key is checked here, against the chain.
+PLAYGROUND = "aa-agent.testnet"
+TOKEN = "usdc.fakes.testnet"
 YOCTO = 10**24
 
+# (transaction hash, signer, expected event or deny reason, description)
 PROOFS = [
-    ("2UEaarEHrGvi3MbCohmTGF7fEnr4pTXs6JcnK9edXzPr", "spend_allowed",
+    ("2UEaarEHrGvi3MbCohmTGF7fEnr4pTXs6JcnK9edXzPr", AGENT, "spend_allowed",
      "legitimate payment to an allowlisted payee"),
-    ("HAd35gbQuPMe8d8JVzJhmFobgsT7s8igoyqVv7iUWz8y", "recipient_not_allowlisted",
+    ("HAd35gbQuPMe8d8JVzJhmFobgsT7s8igoyqVv7iUWz8y", AGENT, "recipient_not_allowlisted",
      "prompt-injected drain to attacker.testnet"),
-    ("2AGh8GW2DoZaPbQkrgew7C5b6DouvD6aVHZkBFF5FknA", "exceeds_per_tx_cap",
+    ("2AGh8GW2DoZaPbQkrgew7C5b6DouvD6aVHZkBFF5FknA", AGENT, "exceeds_per_tx_cap",
      "oversized transfer, above the per-transaction cap"),
+    ("GuJRKr2v51koWPfMYKBJCN8upGnP26eowsMPNXjNE9SM", PLAYGROUND, "ft_spend_allowed",
+     "legitimate USDC.e payment to an allowlisted payee"),
+    ("5td8rsqQgbsTgjqQ4N8cGTSD4APJwXZo6cWv2aY6iZTT", PLAYGROUND, "recipient_not_allowlisted",
+     "prompt-injected stablecoin drain to attacker.testnet"),
 ]
 
 _tty = sys.stdout.isatty()
@@ -81,6 +90,36 @@ def view(method, args=None):
 def near(y): return int(y) / YOCTO
 
 
+def check_key(account, expected_methods):
+    """Assert an agent account holds exactly one protocol-restricted key."""
+    print(f"\n   {account}")
+    keys = rpc({
+        "jsonrpc": "2.0", "id": 1, "method": "query",
+        "params": {"request_type": "view_access_key_list",
+                   "finality": "final", "account_id": account},
+    })["keys"]
+    full = [k for k in keys if k["access_key"]["permission"] == "FullAccess"]
+    fc = [k for k in keys if k["access_key"]["permission"] != "FullAccess"]
+    for k in fc:
+        p = k["access_key"]["permission"]["FunctionCall"]
+        allowance = p.get("allowance")
+        print(f"        methods  : {p['method_names']}")
+        print(f"        contract : {p['receiver_id']}")
+        # An allowance may legitimately be null, meaning unlimited gas. It is
+        # still gas only: no function-call key can attach a token deposit.
+        print("        allowance: " + (
+            f"{near(allowance):.2f} NEAR (gas only — a function-call key "
+            "cannot move tokens)" if allowance else
+            "unlimited gas — still cannot move tokens"))
+    perm = fc[0]["access_key"]["permission"]["FunctionCall"] if len(fc) == 1 else {}
+    check(len(keys) == 1, f"{account} holds exactly one access key")
+    check(not full, f"no full-access key exists on {account}")
+    check(perm.get("method_names") == expected_methods,
+          f"key is limited to {', '.join(expected_methods)}")
+    check(perm.get("receiver_id") == VAULT,
+          "key is limited to the vault contract")
+
+
 def main():
     print(bold("Agent Allowance — on-chain verification"))
     print(f"contract : {VAULT}")
@@ -100,30 +139,11 @@ def main():
     print(f"        kill switch     : {'PAUSED' if d['paused'] else 'active'}")
 
     # 2 --------------------------------------- the protocol-level guarantee
-    print(bold("\n2. The agent's key is restricted by the NEAR protocol"))
-    print("   Claim: the agent holds exactly one key, and that key can call")
-    print("   only request_spend on the vault — nothing else on NEAR.")
-    keys = rpc({
-        "jsonrpc": "2.0", "id": 1, "method": "query",
-        "params": {"request_type": "view_access_key_list",
-                   "finality": "final", "account_id": AGENT},
-    })["keys"]
-    full = [k for k in keys if k["access_key"]["permission"] == "FullAccess"]
-    fc = [k for k in keys if k["access_key"]["permission"] != "FullAccess"]
-    for k in fc:
-        p = k["access_key"]["permission"]["FunctionCall"]
-        print(f"        methods  : {p['method_names']}")
-        print(f"        contract : {p['receiver_id']}")
-        print(f"        allowance: {near(p['allowance']):.2f} NEAR (gas only — "
-              f"a function-call key cannot move tokens)")
-    check(len(keys) == 1, "account holds exactly one access key")
-    check(not full, "no full-access key exists on the agent account")
-    check(len(fc) == 1 and
-          fc[0]["access_key"]["permission"]["FunctionCall"]["method_names"]
-          == ["request_spend"], "key is limited to request_spend")
-    check(len(fc) == 1 and
-          fc[0]["access_key"]["permission"]["FunctionCall"]["receiver_id"]
-          == VAULT, "key is limited to the vault contract")
+    print(bold("\n2. Agent keys are restricted by the NEAR protocol"))
+    print("   Claim: each agent holds exactly one key, and that key can call")
+    print("   only its named methods on the vault — nothing else on NEAR.")
+    check_key(AGENT, ["request_spend"])
+    check_key(PLAYGROUND, ["request_spend", "request_spend_ft"])
 
     # 3 ------------------------------------------------- policy is enforced
     print(bold("\n3. Spending policy is live on-chain"))
@@ -144,12 +164,29 @@ def main():
         check(p["denied_count"] > 0,
               f"{p['denied_count']} attempts were blocked and recorded")
 
+    play = next((a for a in d["agents"] if a["agent_id"] == PLAYGROUND), None)
+    print(f"\n   {PLAYGROUND} — the agent whose key the site publishes")
+    if not play:
+        check(False, f"{PLAYGROUND} is registered against the vault")
+    else:
+        check(play["policy"]["enabled"], "the published agent is registered and enabled")
+        tok = next((t for t in play["tokens"] if t["token_id"] == TOKEN), None)
+        if tok:
+            print(f"        {TOKEN} per-tx: {int(tok['policy']['per_tx_cap'])/10**6:.2f}"
+                  f"  daily: {int(tok['policy']['daily_cap'])/10**6:.2f}")
+        check(tok is not None, f"a {TOKEN} policy governs the published agent")
+        held = next((t for t in d["tokens"] if t["token_id"] == TOKEN), None)
+        if held:
+            print(f"        vault holds: {int(held['balance'])/10**6:.2f} USDC.e")
+        check(held is not None and int(held["balance"]) > 0,
+              "the vault really holds the stablecoin it governs")
+
     # 4 ------------------------------------------------------ proof on chain
-    print(bold("\n4. Recorded outcomes of three real transactions"))
-    for tx_hash, expect, label in PROOFS:
+    print(bold("\n4. Recorded outcomes of five real transactions"))
+    for tx_hash, signer, expect, label in PROOFS:
         try:
             out = rpc({"jsonrpc": "2.0", "id": 1, "method": "tx",
-                       "params": [tx_hash, AGENT]})
+                       "params": [tx_hash, signer]})
             logs = [l for o in out.get("receipts_outcome", [])
                     for l in o["outcome"]["logs"] if "EVENT_JSON" in l]
             events = []

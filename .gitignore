@@ -1,0 +1,21 @@
+# Rust / contract build artifacts
+contract/target/
+target/
+**/*.rs.bk
+*.wasm
+
+# NEAR credentials — never commit keys
+.near-credentials/
+neardev/
+*.json.key
+secrets.env
+.env
+.env.local
+
+# Node
+node_modules/
+dist/
+.next/
+
+# OS
+.DS_Store

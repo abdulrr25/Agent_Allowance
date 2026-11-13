@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  contract:
+    name: contract — fmt, clippy, tests, wasm
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup component add rustfmt clippy
+          rustup target add wasm32-unknown-unknown
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            contract/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('contract/Cargo.lock') }}
+
+      - name: Formatting
+        working-directory: contract
+        run: cargo fmt --check
+
+      - name: Lints
+        working-directory: contract
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Unit tests
+        working-directory: contract
+        run: cargo test
+
+      - name: Build wasm
+        working-directory: contract
+        run: cargo build --target wasm32-unknown-unknown --release
+
+  verify:
+    name: on-chain verification
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify the live deployment
+        run: python3 scripts/verify.py

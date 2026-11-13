@@ -8,17 +8,19 @@ Protocol-enforced spending limits for AI agents on NEAR. Live on testnet at
 ## Attack it yourself
 
 Open the dashboard and you will find **a real NEAR private key published in the
-page**. It belongs to `aa-playground.testnet`, a live agent registered against
-this vault. Type your own prompt-injection text, point it at any address you
-like, and sign a genuine testnet transaction from your browser.
+page**. It belongs to `aa-agent.testnet`, a live agent registered against this
+vault, holding both NEAR and USDC. Pick an asset, type your own prompt-injection
+text, point it at any address you like, and sign a genuine testnet transaction
+from your browser.
 
 It will fail. Every time.
 
-That key is a NEAR **FunctionCall** key restricted to `request_spend` on this
-vault. By protocol it cannot attach tokens and cannot call any other contract
-on NEAR, and the account holds no full-access key. Publishing it is not an
-oversight — it is the entire argument, stated in the strongest form available:
-here is the key, the money is behind it, and you still cannot take it.
+That key is a NEAR **FunctionCall** key restricted to `request_spend` and
+`request_spend_ft` on this vault. By protocol it cannot attach tokens and cannot
+call any other contract on NEAR, and the account holds no full-access key.
+Publishing it is not an oversight — it is the entire argument, stated in the
+strongest form available: here is the key, the money is behind it, and you still
+cannot take it.
 
 ```bash
 cd web && python3 -m http.server 8787   # then open http://127.0.0.1:8787
@@ -113,11 +115,16 @@ Here it is a protocol primitive.
 Three real transactions, signed by an agent account that holds **only** the
 restricted key:
 
-| Scenario | Result | Transaction |
-|---|---|---|
-| Pay an allowlisted payee 0.5 NEAR | **allowed** | [`2UEaar…`](https://explorer.testnet.near.org/transactions/2UEaarEHrGvi3MbCohmTGF7fEnr4pTXs6JcnK9edXzPr) |
-| Prompt-injected drain to `attacker.testnet` | **denied** | [`HAd35g…`](https://explorer.testnet.near.org/transactions/HAd35gbQuPMe8d8JVzJhmFobgsT7s8igoyqVv7iUWz8y) |
-| Oversized 5 NEAR transfer (cap is 1) | **denied** | [`2AGh8G…`](https://explorer.testnet.near.org/transactions/2AGh8GW2DoZaPbQkrgew7C5b6DouvD6aVHZkBFF5FknA) |
+| Asset | Scenario | Result | Transaction |
+|---|---|---|---|
+| NEAR | Pay an allowlisted payee 0.5 | **allowed** | [`2UEaar…`](https://explorer.testnet.near.org/transactions/2UEaarEHrGvi3MbCohmTGF7fEnr4pTXs6JcnK9edXzPr) |
+| NEAR | Prompt-injected drain to `attacker.testnet` | **denied** | [`HAd35g…`](https://explorer.testnet.near.org/transactions/HAd35gbQuPMe8d8JVzJhmFobgsT7s8igoyqVv7iUWz8y) |
+| NEAR | Oversized 5 NEAR transfer, cap is 1 | **denied** | [`2AGh8G…`](https://explorer.testnet.near.org/transactions/2AGh8GW2DoZaPbQkrgew7C5b6DouvD6aVHZkBFF5FknA) |
+| USDC.e | Pay an allowlisted payee 2 USDC.e | **allowed** | [`GuJRKr…`](https://explorer.testnet.near.org/transactions/GuJRKr2v51koWPfMYKBJCN8upGnP26eowsMPNXjNE9SM) |
+| USDC.e | Prompt-injected stablecoin drain | **denied** | [`5td8rs…`](https://explorer.testnet.near.org/transactions/5td8rsqQgbsTgjqQ4N8cGTSD4APJwXZo6cWv2aY6iZTT) |
+
+The vault holds **real testnet USDC.e** (`usdc.fakes.testnet`), not a mock. The
+token path is live, not merely unit-tested.
 
 The second one is the point. The compromised agent genuinely tried, and the
 attempt is preserved on-chain forever — including the injected text:
@@ -228,12 +235,18 @@ event straight from its transaction record, so the attack shown on the page is
 the contract's own output rather than a screenshot — including the injected
 text the compromised agent submitted.
 
-The attack console at the top signs with the published playground key. That
-agent is capped at 0.01 NEAR per transaction and 0.1 NEAR per day to a single
-allowlisted address, so the worst a visitor can do is move a rounding error
-between two accounts we control. Its key carries a 5 NEAR gas allowance, which
-pays for roughly twenty thousand rejected attempts before the key exhausts
-itself — a bound the protocol enforces, not us.
+The attack console at the top signs with the published key. That agent is
+capped at 0.01 NEAR and 5 USDC.e per transaction, to a single allowlisted
+address, so the worst a visitor can do is move a rounding error between two
+accounts we control. Its key carries a 5 NEAR gas allowance, which pays for
+roughly twenty thousand rejected attempts before the key exhausts itself — a
+bound the protocol enforces, not us.
+
+One detail worth noticing: an earlier playground key was restricted to
+`request_spend` alone. When token support shipped, that key could not call
+`request_spend_ft` at all — the network refused the transaction before the
+contract was reached, and because the account holds no full-access key, no
+method could be added to it. The containment is not advisory.
 
 Transactions are built and signed explicitly rather than via
 `account.functionCall()`. That wrapper resolves access keys through a path that

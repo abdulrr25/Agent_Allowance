@@ -137,13 +137,23 @@ pub struct AgentPolicy {
     pub allowlist: Vec<AccountId>,
 }
 
-/// Live view of an agent, including remaining headroom.
+/// One agent's policy for one fungible token, with remaining headroom.
+#[near(serializers = [json])]
+pub struct FtStatus {
+    pub token_id: AccountId,
+    pub policy: AgentPolicy,
+    pub remaining_today: U128,
+}
+
+/// Live view of an agent, including remaining headroom, across native NEAR
+/// and every token it has a policy for.
 #[near(serializers = [json])]
 pub struct AgentStatus {
     pub agent_id: AccountId,
     pub policy: AgentPolicy,
     pub remaining_today: U128,
     pub window_resets_in_ns: U64,
+    pub tokens: Vec<FtStatus>,
 }
 
 /// A fungible token balance held by the vault.
@@ -825,11 +835,26 @@ impl Contract {
         } else {
             (policy.spent_in_window.0, DAY_NS - elapsed)
         };
+        let tokens = self
+            .accepted_tokens
+            .iter()
+            .filter_map(|token_id| {
+                let p = self.ft_policies.get(&ft_key(&agent_id, token_id))?.clone();
+                let elapsed = now.saturating_sub(p.window_start_ns.0);
+                let spent = if elapsed >= DAY_NS { 0 } else { p.spent_in_window.0 };
+                Some(FtStatus {
+                    token_id: token_id.clone(),
+                    remaining_today: U128(p.daily_cap.0.saturating_sub(spent)),
+                    policy: p,
+                })
+            })
+            .collect();
         Some(AgentStatus {
             agent_id,
             remaining_today: U128(policy.daily_cap.0.saturating_sub(spent)),
             window_resets_in_ns: U64(resets_in),
             policy,
+            tokens,
         })
     }
 

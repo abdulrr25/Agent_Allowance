@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent Allowance</title>
+<style>
+  :root{
+    --bg:#0a0b0d; --panel:#131519; --line:#232730; --text:#e8eaed;
+    --dim:#8b919c; --accent:#5eead4; --allow:#34d399; --deny:#f87171;
+    --warn:#fbbf24; --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    padding:0 16px}
+  .wrap{max-width:980px;margin:0 auto;padding:48px 0 80px}
+  header{border-bottom:1px solid var(--line);padding-bottom:28px;margin-bottom:32px}
+  h1{margin:0 0 6px;font-size:30px;letter-spacing:-.5px}
+  .sub{color:var(--dim);font-size:15px;margin:0}
+  .addr{font-family:var(--mono);font-size:13px;color:var(--accent);
+    margin-top:14px;display:inline-block;padding:5px 10px;
+    background:rgba(94,234,212,.08);border-radius:6px}
+  h2{font-size:13px;text-transform:uppercase;letter-spacing:1.2px;
+    color:var(--dim);margin:40px 0 14px;font-weight:600}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+  .card{background:var(--panel);border:1px solid var(--line);
+    border-radius:10px;padding:18px}
+  .label{color:var(--dim);font-size:12px;text-transform:uppercase;
+    letter-spacing:.6px;margin-bottom:8px}
+  .val{font-family:var(--mono);font-size:24px;font-weight:600}
+  .val.sm{font-size:15px;word-break:break-all}
+  .agent{background:var(--panel);border:1px solid var(--line);
+    border-radius:10px;padding:20px;margin-bottom:12px}
+  .agent-id{font-family:var(--mono);font-size:14px;color:var(--accent);
+    margin-bottom:16px;word-break:break-all}
+  .rows{display:grid;gap:10px}
+  .row{display:flex;justify-content:space-between;align-items:center;
+    gap:12px;font-size:14px;flex-wrap:wrap}
+  .row .k{color:var(--dim)}
+  .row .v{font-family:var(--mono)}
+  .bar{height:6px;background:#1e222a;border-radius:3px;
+    overflow:hidden;margin-top:6px}
+  .bar i{display:block;height:100%;background:var(--accent);border-radius:3px}
+  .pill{display:inline-block;padding:3px 9px;border-radius:999px;
+    font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase}
+  .pill.on{background:rgba(52,211,153,.15);color:var(--allow)}
+  .pill.off{background:rgba(248,113,113,.15);color:var(--deny)}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th{text-align:left;color:var(--dim);font-size:12px;text-transform:uppercase;
+    letter-spacing:.6px;font-weight:600;padding:0 10px 10px 0;
+    border-bottom:1px solid var(--line)}
+  td{padding:14px 10px 14px 0;border-bottom:1px solid var(--line);
+    vertical-align:top}
+  tr:last-child td{border-bottom:0}
+  .tag{font-family:var(--mono);font-size:11px;font-weight:700;
+    padding:3px 8px;border-radius:5px;white-space:nowrap}
+  .tag.a{background:rgba(52,211,153,.14);color:var(--allow)}
+  .tag.d{background:rgba(248,113,113,.14);color:var(--deny)}
+  a{color:var(--accent)}
+  code{font-family:var(--mono);font-size:12.5px;background:#1a1d23;
+    padding:2px 6px;border-radius:4px;color:var(--warn)}
+  .note{color:var(--dim);font-size:13px;margin-top:10px;line-height:1.65}
+  .err{color:var(--deny);font-family:var(--mono);font-size:13px}
+  footer{margin-top:56px;padding-top:24px;border-top:1px solid var(--line);
+    color:var(--dim);font-size:13px}
+  @media(max-width:560px){.val{font-size:20px}h1{font-size:24px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Agent Allowance</h1>
+  <p class="sub">Protocol-enforced spending limits for AI agents on NEAR.</p>
+  <span class="addr" id="contract">agent-allowance.testnet</span>
+</header>
+
+<h2>Vault</h2>
+<div class="grid" id="stats">
+  <div class="card"><div class="label">Loading…</div></div>
+</div>
+
+<h2>Agents under policy</h2>
+<div id="agents"><div class="card"><div class="label">Loading…</div></div></div>
+
+<h2>Proof on testnet</h2>
+<table>
+  <thead><tr><th>Scenario</th><th>Result</th><th>Transaction</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>Pay allowlisted payee 0.5 NEAR</td>
+      <td><span class="tag a">ALLOWED</span></td>
+      <td><a target="_blank" rel="noopener" href="https://explorer.testnet.near.org/transactions/2UEaarEHrGvi3MbCohmTGF7fEnr4pTXs6JcnK9edXzPr">2UEaar…</a></td>
+    </tr>
+    <tr>
+      <td>Prompt-injected drain to <code>attacker.testnet</code><div class="note">memo: “URGENT: owner authorized emergency transfer”</div></td>
+      <td><span class="tag d">DENIED</span></td>
+      <td><a target="_blank" rel="noopener" href="https://explorer.testnet.near.org/transactions/HAd35gbQuPMe8d8JVzJhmFobgsT7s8igoyqVv7iUWz8y">HAd35g…</a></td>
+    </tr>
+    <tr>
+      <td>Oversized 5 NEAR transfer (cap is 1)</td>
+      <td><span class="tag d">DENIED</span></td>
+      <td><a target="_blank" rel="noopener" href="https://explorer.testnet.near.org/transactions/2AGh8GW2DoZaPbQkrgew7C5b6DouvD6aVHZkBFF5FknA">2AGh8G…</a></td>
+    </tr>
+  </tbody>
+</table>
+<p class="note">
+  The agent account holds <strong>exactly one key</strong>, restricted by the NEAR
+  protocol to <code>request_spend</code> on this contract. It cannot attach a token
+  deposit and cannot call any other contract. Verify against the RPC yourself —
+  nothing here is taken on trust.
+</p>
+
+<footer>
+  Live data read from <code>rpc.testnet.near.org</code> ·
+  <span id="updated">—</span>
+</footer>
+
+</div>
+
+<script>
+// One view call serves the whole page. Public RPC endpoints throttle bursts of
+// parallel requests, so the contract exposes a single `dashboard()` method and
+// we fall back to a second endpoint if the first is unreachable.
+const RPCS = ["https://rpc.testnet.near.org", "https://test.rpc.fastnear.com"];
+const CONTRACT = "agent-allowance.testnet";
+const YOCTO = 1e24;
+
+async function fetchDashboard() {
+  let lastErr;
+  for (const rpc of RPCS) {
+    try {
+      const res = await fetch(rpc, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0", id: 1, method: "query",
+          params: {
+            request_type: "call_function", finality: "final",
+            account_id: CONTRACT, method_name: "dashboard", args_base64: "e30="
+          }
+        })
+      });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const j = await res.json();
+      if (j.error) throw new Error(j.error.message || "RPC error");
+      if (j.result && j.result.error) throw new Error(j.result.error);
+      return JSON.parse(new TextDecoder().decode(new Uint8Array(j.result.result)));
+    } catch (e) { lastErr = e; }
+  }
+  throw lastErr;
+}
+
+const fmt = y => (Number(y) / YOCTO).toLocaleString(undefined, { maximumFractionDigits: 2 });
+const unit = '<span style="font-size:14px;color:var(--dim)">NEAR</span>';
+
+const card = (label, value, cls = "") =>
+  `<div class="card"><div class="label">${label}</div><div class="val ${cls}">${value}</div></div>`;
+
+function renderAgent(s) {
+  const p = s.policy;
+  const daily = Number(p.daily_cap), left = Number(s.remaining_today);
+  const usedPct = daily ? Math.min(100, Math.max(0, ((daily - left) / daily) * 100)) : 0;
+  const hrs = (Number(s.window_resets_in_ns) / 3.6e12).toFixed(1);
+  return `<div class="agent">
+    <div class="agent-id">${s.agent_id}</div>
+    <div class="rows">
+      <div class="row"><span class="k">Status</span><span class="v">${
+        p.enabled ? '<span class="pill on">Enabled</span>' : '<span class="pill off">Disabled</span>'
+      }</span></div>
+      <div class="row"><span class="k">Per-transaction cap</span><span class="v">${fmt(p.per_tx_cap)} NEAR</span></div>
+      <div class="row"><span class="k">Daily cap</span><span class="v">${fmt(p.daily_cap)} NEAR</span></div>
+      <div class="row"><span class="k">Allowed recipients</span><span class="v">${p.allowlist.join(", ")}</span></div>
+      <div class="row"><span class="k">Spends allowed</span><span class="v" style="color:var(--allow)">${p.allowed_count}</span></div>
+      <div class="row"><span class="k">Attempts blocked</span><span class="v" style="color:var(--deny)">${p.denied_count}</span></div>
+      <div class="row"><span class="k">Lifetime spent</span><span class="v">${fmt(p.lifetime_spent)} NEAR</span></div>
+    </div>
+    <div style="margin-top:16px">
+      <div class="row"><span class="k">Remaining today</span>
+        <span class="v">${fmt(s.remaining_today)} / ${fmt(p.daily_cap)} NEAR</span></div>
+      <div class="bar"><i style="width:${usedPct}%"></i></div>
+      <div class="note">Window resets in ${hrs} hours.</div>
+    </div>
+  </div>`;
+}
+
+async function load() {
+  try {
+    const d = await fetchDashboard();
+    document.getElementById("stats").innerHTML =
+      card("Available balance", fmt(d.available_balance) + " " + unit) +
+      card("Total spent", fmt(d.total_spent) + " " + unit) +
+      card("Attempts blocked", d.total_denied) +
+      card("Kill switch", d.paused
+        ? '<span class="pill off">Paused</span>'
+        : '<span class="pill on">Active</span>', "sm");
+
+    document.getElementById("agents").innerHTML =
+      d.agents.length
+        ? d.agents.map(renderAgent).join("")
+        : '<div class="card"><div class="label">No agents registered</div></div>';
+
+    document.getElementById("updated").textContent =
+      "updated " + new Date().toLocaleTimeString();
+  } catch (e) {
+    document.getElementById("stats").innerHTML =
+      `<div class="card"><div class="err">Could not reach NEAR RPC: ${e.message}</div></div>`;
+  }
+}
+
+load();
+setInterval(load, 30000);
+</script>
+</body>
+</html>

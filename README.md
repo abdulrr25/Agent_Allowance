@@ -128,6 +128,26 @@ curl -s -X POST https://rpc.testnet.near.org -H 'Content-Type: application/json'
 
 ---
 
+## Dashboard
+
+A dependency-free dashboard lives in [`web/index.html`](web/index.html) — one
+HTML file, no build step, no npm. Open it directly or serve it:
+
+```bash
+cd web && python3 -m http.server 8787   # then open http://127.0.0.1:8787
+```
+
+It reads live state straight from the contract and shows vault balance, each
+agent's policy, remaining daily headroom, and the running allowed/blocked
+counts.
+
+The contract exposes a single `dashboard()` view that returns the entire page
+state in one call. This is deliberate: issuing one RPC request per field gets
+throttled by public endpoints and the page renders half-broken. One call, plus
+a fallback endpoint, makes it reliable for anyone opening it cold.
+
+---
+
 ## Design decisions worth defending
 
 **Denials are recorded, not reverted.** A denied request returns a value instead

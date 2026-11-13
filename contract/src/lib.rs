@@ -124,6 +124,20 @@ pub struct AgentStatus {
     pub window_resets_in_ns: U64,
 }
 
+/// Everything the dashboard needs, in a single view call. Front ends that
+/// issue one request per field get throttled by public RPC endpoints, so the
+/// whole page state is served here at once.
+#[near(serializers = [json])]
+pub struct Dashboard {
+    pub owner_id: AccountId,
+    pub paused: bool,
+    pub vault_balance: U128,
+    pub available_balance: U128,
+    pub total_spent: U128,
+    pub total_denied: u64,
+    pub agents: Vec<AgentStatus>,
+}
+
 #[near(contract_state)]
 #[derive(PanicOnDefault)]
 pub struct Contract {
@@ -510,6 +524,27 @@ impl Contract {
             "agent_count": self.agents.len(),
             "paused": self.paused,
         })
+    }
+
+    /// Full dashboard state in one call.
+    pub fn dashboard(&self) -> Dashboard {
+        let agents: Vec<AgentStatus> = self
+            .agents
+            .keys()
+            .cloned()
+            .collect::<Vec<AccountId>>()
+            .into_iter()
+            .filter_map(|id| self.get_agent_status(id))
+            .collect();
+        Dashboard {
+            owner_id: self.owner_id.clone(),
+            paused: self.paused,
+            vault_balance: U128(env::account_balance().as_yoctonear()),
+            available_balance: U128(Self::available_balance_internal().as_yoctonear()),
+            total_spent: self.total_spent,
+            total_denied: self.total_denied,
+            agents,
+        }
     }
 
     // -------------------------------------------------------------- internal

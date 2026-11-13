@@ -1,24 +1,33 @@
 <!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Attack it — Agent Allowance</title>
-<meta name="description" content="A real NEAR private key, published on purpose. Try to steal the vault's money with it — every attempt is a genuine signed testnet transaction.">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%238b5cf6'/%3E%3Cstop offset='1' stop-color='%2322d3ee'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='8' fill='url(%23g)'/%3E%3Ctext x='16' y='23' font-family='monospace' font-size='19' font-weight='700' text-anchor='middle' fill='%230b0514'%3EA%3C/text%3E%3C/svg%3E">
-<link rel="stylesheet" href="assets/app.css?v=3">
+<title>Attack console — Agent Allowance</title>
+<meta name="description" content="A real NEAR private key, published on purpose. Pick one of nine attacks and sign it in your browser — every attempt is a genuine testnet transaction.">
+<meta property="og:title" content="Attack console — Agent Allowance">
+<meta property="og:description" content="A real NEAR private key, published on purpose. Pick one of nine attacks and sign it in your browser — every attempt is a genuine testnet transaction.">
+<meta property="og:type" content="website">
+<meta name="theme-color" content="#07080c">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%238b7cf6'/%3E%3Cstop offset='1' stop-color='%2338d5ee'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='8' fill='url%28%23g%29'/%3E%3Cg transform='translate%284 4%29' fill='none' stroke='%230a0b14' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 3l7 3v5c0 4.5-3 8.2-7 10-4-1.8-7-5.5-7-10V6l7-3z'/%3E%3Cpath d='M9.2 12.2l2 2 3.8-4'/%3E%3C/g%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;700&amp;display=swap">
+<link rel="stylesheet" href="assets/app.css?v=8">
 </head><body>
-<nav class="nav"><div class="nav-in">
-    <a class="brand" href="index.html"><span class="mark">A</span>Agent Allowance</a>
-    <div class="nav-links">
-      <a href="index.html">Overview</a>
-      <a href="attack.html">Attack it</a>
-      <a href="proof.html">Proof</a>
-      <a href="flow.html">How it works</a>
-      <a href="https://github.com/abdulrr25/Agent_Allowance" target="_blank" rel="noopener">GitHub ↗</a>
-    </div></div></nav>
-<main class="shell">
+<header class="nav"><div class="nav-in">
+  <a class="brand" href="index.html"><span class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5c0 4.5-3 8.2-7 10-4-1.8-7-5.5-7-10V6l7-3z"/><path d="M9.2 12.2l2 2 3.8-4"/></svg></span>Agent Allowance</a>
+  <nav class="nav-links" id="navlinks" aria-label="Primary">
+    <a href="index.html">Overview</a><a href="attack.html">Attack console</a><a href="activity.html">Activity</a><a href="proof.html">Proof</a><a href="flow.html">How it works</a><a href="docs.html">Use it</a>
+  </nav>
+  <div class="nav-cta">
+    <a class="iconlink" href="https://github.com/abdulrr25/Agent_Allowance" target="_blank" rel="noopener" aria-label="Source on GitHub"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 00-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.9 1.52 2.34 1.08 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.56-1.11-4.56-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02a9.6 9.6 0 015 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10 10 0 0012 2z"/></svg></a>
+    <a class="btn sm" href="attack.html">Try to break it</a>
+    <button class="menu" id="navmenu" type="button" aria-expanded="false" aria-controls="navlinks" aria-label="Menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+  </div>
+</div></header>
+<main id="main"><div class="shell">
   <div class="hero tight">
     <span class="badge live"><span class="dot"></span><span id="sdk">loading signer…</span></span>
-    <h1 style="margin-top:22px">You are now the<br><span class="grad">compromised agent.</span></h1>
+    <h1>You are now the<br><span class="grad">compromised agent.</span></h1>
     <p class="lede">Below is a real NEAR private key, published on purpose. Pick an attack
       and sign it. Every attempt is a genuine transaction sent to NEAR testnet from your
       browser — nothing on this page is simulated.</p>
@@ -36,10 +45,10 @@
           it. That is why publishing it is safe — and why it is the whole argument.</span>
       </div>
 
-      <div class="sub" id="menulabel">1 · Choose your attack</div>
+      <div class="sub" id="menulabel"><span class="n">1</span>Choose your attack</div>
       <div class="atk" id="menu" role="group" aria-labelledby="menulabel"></div>
 
-      <div class="sub">2 · What you are about to sign</div>
+      <div class="sub"><span class="n">2</span>What you are about to sign</div>
       <div id="custom">
         <label id="assetlabel">Asset to steal</label>
         <div class="seg" id="seg" role="group" aria-labelledby="assetlabel">
@@ -63,7 +72,7 @@
         <button class="btn danger" id="go" type="button" disabled style="flex:1">Sign and send the attack</button>
       </div>
 
-      <div class="sub">3 · Where it got to</div>
+      <div class="sub"><span class="n">3</span>Where it got to</div>
       <div id="pipe"></div>
       <div class="ev" id="out" role="status" aria-live="polite">Awaiting your attempt…</div>
 
@@ -78,17 +87,17 @@
   </section>
 
   <section>
-    <div class="sec">Two gates, and what each one is for</div>
+    <div class="head"><span class="eyebrow">What you just saw</span><h2>Two gates, and what each one is for.</h2></div>
     <div class="grid g2">
       <div class="glass pad">
-        <h2>Gate 1 refuses the key</h2>
+        <h3>Gate 1 refuses the key</h3>
         <p class="muted">Six of these attacks never reach a block. A NEAR function-call key
         names one contract and a list of methods, and can never attach a deposit. Send
         anything else and the network rejects the transaction outright — the vault does not
         run, no fee is charged, and there is no transaction hash to show you.</p>
       </div>
       <div class="glass pad">
-        <h2>Gate 2 refuses the request</h2>
+        <h3>Gate 2 refuses the request</h3>
         <p class="muted">The rest are calls the key is allowed to make. The vault compares the
         recipient with an allowlist and the amount with a per-payment cap and a rolling daily
         cap. Your wording never enters the decision — the contract does not read English —
@@ -98,7 +107,7 @@
   </section>
 
   <section>
-    <div class="sec">The same attacks, from a terminal</div>
+    <div class="head"><span class="eyebrow">Without a browser</span><h2>The same attacks, from a terminal.</h2></div>
     <div class="glass pad">
       <p class="muted" style="margin:0 0 16px">Nothing to install — the script signs with the
       Python standard library and exits non-zero if any attack gets through.</p>
@@ -116,12 +125,33 @@ Summary
   9 of 9 attacks stopped</div>
     </div>
   </section>
-</main>
-<footer class="shell"><span>Live on NEAR testnet · <code>agent-allowance.testnet</code></span>
-  <span id="updated">—</span></footer>
-
+</div></main>
+<footer><div class="shell">
+  <div class="foot">
+    <div>
+      <a class="brand" href="index.html"><span class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5c0 4.5-3 8.2-7 10-4-1.8-7-5.5-7-10V6l7-3z"/><path d="M9.2 12.2l2 2 3.8-4"/></svg></span>Agent Allowance</a>
+      <p class="blurb">Protocol-enforced spending limits for AI agents on NEAR. Assume the agent
+      is compromised; bound what it can do.</p>
+    </div>
+    <div><h4>Product</h4>
+      <a href="index.html">Overview</a><a href="attack.html">Attack console</a>
+      <a href="activity.html">Activity</a><a href="proof.html">Proof</a></div>
+    <div><h4>Learn</h4>
+      <a href="flow.html">How it works</a><a href="docs.html">Use it</a>
+      <a href="docs.html#api">API reference</a><a href="docs.html#limits">What it does not solve</a></div>
+    <div><h4>On-chain</h4>
+      <a href="https://testnet.nearblocks.io/address/agent-allowance.testnet" target="_blank" rel="noopener">agent-allowance.testnet ↗</a>
+      <a href="https://github.com/abdulrr25/Agent_Allowance" target="_blank" rel="noopener">Source on GitHub ↗</a>
+      <a href="https://github.com/abdulrr25/Agent_Allowance/blob/main/LICENSE" target="_blank" rel="noopener">MIT License ↗</a></div>
+  </div>
+  <div class="legal">
+    <span class="by">Built by <a href="https://github.com/abdulrr25" target="_blank" rel="noopener">abdulrr25</a>
+      for NEAR HACKATHON · November 2026</span>
+    <span>NEAR testnet · unaudited · <span id="updated">reading chain…</span></span>
+  </div>
+</div></footer>
 <script src="https://cdn.jsdelivr.net/npm/near-api-js@4.0.3/dist/near-api-js.min.js"></script>
-<script src="assets/app.js?v=3"></script>
+<script src="assets/app.js?v=5"></script>
 <script>
 const AGENT_KEY="ed25519:dmA2aFjMVuTGSfkcAHLavZs7zXRhFjraP3xF6pZgLH7gdPVJvn9aMazSovmpmB1CPvLa3EAhJupSHoE1zuaAbQb";
 const ATTACKER="attacker.testnet";
@@ -195,20 +225,6 @@ function call(receiver,method,args,deposit=0n){
     actions:[nearApi.transactions.functionCall(method,args,100000000000000n,deposit)],
     show:{receiver,action:"FunctionCall",method,args,
           ...(deposit?{deposit:deposit+" yoctoNEAR"}:{})}};
-}
-
-/** Parse a decimal amount into exact integer base units. String arithmetic,
- *  not floats, so a long or large amount cannot lose precision on its way to
- *  the chain — and a typo gets a readable message instead of a BigInt error. */
-function toUnits(str,dec){
-  if(!/^\d+(\.\d+)?$/.test(str))
-    throw new Error(`"${str}" is not a valid amount. Enter a positive number, for example 0.005.`);
-  const [whole,frac=""]=str.split(".");
-  if(frac.length>dec)
-    throw new Error(`Too many decimal places — this asset has ${dec}.`);
-  const units=BigInt(whole+frac.padEnd(dec,"0"));
-  if(units===0n) throw new Error("Enter an amount greater than zero.");
-  return units;
 }
 
 /** The transaction for the custom, prompt-injected payment. Throws a readable

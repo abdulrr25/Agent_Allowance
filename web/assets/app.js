@@ -38,6 +38,20 @@ const fmt = (v, d) => (Number(v) / 10 ** d).toLocaleString(undefined,
   { maximumFractionDigits: d > 6 ? 3 : 2 });
 const short = h => h.slice(0, 8) + "…";
 
+/** Parse a decimal amount into exact integer base units. String arithmetic,
+ *  not floats, so a long or large amount cannot lose precision on its way to
+ *  the chain — and a typo gets a readable message instead of a BigInt error. */
+function toUnits(str, dec) {
+  if (!/^\d+(\.\d+)?$/.test(str))
+    throw new Error(`"${str}" is not a valid amount. Enter a positive number, for example 0.005.`);
+  const [whole, frac = ""] = str.split(".");
+  if (frac.length > dec)
+    throw new Error(`Too many decimal places — this asset has ${dec}.`);
+  const units = BigInt(whole + frac.padEnd(dec, "0"));
+  if (units === 0n) throw new Error("Enter an amount greater than zero.");
+  return units;
+}
+
 /** Stamp the footer with the time of the last successful chain read. */
 function stamp(text) {
   const el = document.getElementById("updated");
@@ -160,13 +174,13 @@ async function loadProofs(containerId = "proofs", tagId = "livetag") {
   const box = document.getElementById(containerId);
   if (!box) return;
   box.innerHTML = PROOFS.map((p, i) => `
-    <div class="glass pad" style="margin-bottom:14px">
+    <div class="glass pad">
       <div style="display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;align-items:flex-start">
-        <div><div style="font-weight:650;font-size:15px">${p.t}</div>
-        <div class="live" style="margin-top:6px">${p.asset}</div></div>
+        <div><h3>${p.t}</h3>
+        <div class="small" style="margin-top:6px">${p.asset} · signed by <code>${p.s}</code> ·
+          <a target="_blank" rel="noopener"
+             href="https://testnet.nearblocks.io/txns/${p.h}">${short(p.h)}</a></div></div>
         <span class="tag ${p.v}">${p.lab}</span></div>
-      <a target="_blank" rel="noopener" style="font-family:var(--mono);font-size:12.5px"
-         href="https://testnet.nearblocks.io/txns/${p.h}">${short(p.h)}</a>
       <div class="ev" id="ev${i}">reading from chain…</div></div>`).join("");
   // Each lookup is independent, so they run together; a slow or failed one
   // never holds up the others.
@@ -191,7 +205,7 @@ async function loadProofs(containerId = "proofs", tagId = "livetag") {
 /** The two-gate pipeline, shared by the overview and the attack console.
  *  Each node takes a state — "", "run", "pass", "stop" or "skip" — and a note. */
 const PIPE = [
-  { id: "key",   k: "Step 1",          t: "Agent key" },
+  { id: "key",   k: "The agent",       t: "Agent key" },
   { id: "net",   k: "Gate 1 · protocol", t: "NEAR network" },
   { id: "vault", k: "Gate 2 · contract", t: "Vault policy" },
   { id: "money", k: "Outcome",         t: "Money moves" }
@@ -214,11 +228,165 @@ function setPipe(states, notes = {}) {
   }
 }
 
-/** Mark the current page in the nav. */
-function markNav() {
+/* ------------------------------------------------------------------
+   Hero replay: recorded transactions, played back from their own events.
+   Nothing here is scripted copy — each scene is read from the chain first,
+   and the window stays on its static first frame if the chain is unreachable.
+   ------------------------------------------------------------------ */
+const wait = ms => new Promise(r => setTimeout(r, ms));
+
+async function startReplay(rootId = "replay") {
+  const root = document.getElementById(rootId);
+  if (!root) return;
+  const line = root.querySelector(".wline .txt"), caret = root.querySelector(".caret");
+  const who = root.querySelector(".who"), src = root.querySelector(".wfoot a");
+  const step = n => root.querySelector(`[data-step="${n}"]`);
+  const set = (n, state, note) => {
+    const el = step(n); el.className = "wstep " + state;
+    el.querySelector(".wm").textContent = ({ pass:"✓", stop:"✕", skip:"–" })[state] || (n + 1);
+    el.querySelector(".wn").textContent = note || "";
+  };
+  const scenes = (await Promise.all(PROOFS.map(async p => {
+    try { const ev = eventsFrom(await txStatus(p.h, p.s))[0]; return ev ? { p, ev } : null; }
+    catch { return null; }
+  }))).filter(Boolean);
+  if (!scenes.length) return;
+  const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  // Lead with the attack, not the happy path.
+  scenes.sort((a, b) => a.ev.event.includes("denied") === b.ev.event.includes("denied") ? 0
+    : a.ev.event.includes("denied") ? -1 : 1);
+
+  for (let i = 0; ; i = (i + 1) % scenes.length) {
+    const { p, ev } = scenes[i], d = ev.data[0], denied = ev.event.includes("denied");
+    const amount = fmt(d.amount, d.token_id ? 6 : 24) + " " + (d.token_id ? tokenName(d.token_id) : "NEAR");
+    const memo = d.memo || "(no memo)";
+    who.textContent = d.agent_id + " ›";
+    src.textContent = "tx " + short(p.h); src.href = "https://testnet.nearblocks.io/txns/" + p.h;
+    [0, 1, 2, 3].forEach(n => set(n, "", ""));
+    line.textContent = ""; caret.hidden = false;
+    if (still) line.textContent = memo;
+    else for (const ch of memo) { line.textContent += ch; await wait(22); }
+    caret.hidden = true;
+    await wait(still ? 0 : 500); set(0, "pass", `asks for ${amount} → ${d.recipient}`);
+    await wait(still ? 0 : 550); set(1, "pass", "key may call " + (d.token_id ? "request_spend_ft" : "request_spend"));
+    await wait(still ? 0 : 650);
+    if (denied) { set(2, "stop", d.reason); set(3, "skip", "nothing moved"); }
+    else { set(2, "pass", "inside policy"); await wait(still ? 0 : 450); set(3, "pass", amount + " paid"); }
+    if (still) return;
+    await wait(4200);
+  }
+}
+
+/* ------------------------------------------------------------------
+   Activity: every call the vault has received, newest first, decoded from
+   the transactions' own receipts.
+   ------------------------------------------------------------------ */
+const TXAPI = "https://tx.test.fastnear.com/v0";
+const OWNER_CALLS = { add_agent:"registered an agent", update_policy:"changed a policy",
+  set_agent_enabled:"toggled an agent", revoke_agent:"revoked an agent",
+  set_paused:"used the kill switch", withdraw:"withdrew NEAR", withdraw_ft:"withdrew tokens",
+  add_token:"accepted a token", remove_token:"stopped accepting a token",
+  set_ft_policy:"set a token policy", revoke_ft_policy:"revoked a token policy",
+  ft_on_transfer:"received a token deposit", new:"initialised the vault",
+  migrate:"migrated the vault" };
+
+async function postJSON(url, body) {
+  const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 15000);
+  try {
+    const r = await fetch(url, { method:"POST", signal:ctl.signal,
+      headers:{ "Content-Type":"application/json" }, body:JSON.stringify(body) });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    return await r.json();
+  } finally { clearTimeout(timer); }
+}
+
+const ago = ms => {
+  const s = Math.max(0, (Date.now() - ms) / 1000);
+  if (s < 60) return "just now";
+  if (s < 3600) return Math.floor(s / 60) + " min ago";
+  if (s < 86400) return Math.floor(s / 3600) + " h ago";
+  return Math.floor(s / 86400) + " d ago";
+};
+
+/** Decode one indexed transaction into a feed row. */
+function activityRow(t) {
+  const tx = t.transaction, call = (tx.actions[0] || {}).FunctionCall;
+  if (!call) return null;
+  const logs = [t.execution_outcome, ...(t.receipts || []).map(r => r.execution_outcome)]
+    .filter(Boolean).flatMap(o => o.outcome.logs || []);
+  const evs = logs.filter(l => l.startsWith("EVENT_JSON:")).map(l => {
+    try { return JSON.parse(l.slice(11)); } catch { return null; } }).filter(Boolean);
+  const when = Number(BigInt(t.execution_outcome.block_timestamp) / 1000000n);
+  const base = { hash: tx.hash, signer: tx.signer_id, when, method: call.method_name };
+  const spend = evs.find(e => /spend_(allowed|denied)$/.test(e.event));
+  if (spend) {
+    const d = spend.data[0], denied = spend.event.includes("denied");
+    return { ...base, kind: denied ? "d" : "a", agent: d.agent_id, recipient: d.recipient,
+      amount: fmt(d.amount, d.token_id ? 6 : 24) + " " + (d.token_id ? tokenName(d.token_id) : "NEAR"),
+      reason: d.reason, memo: d.memo };
+  }
+  if (/^request_spend/.test(call.method_name))
+    return { ...base, kind: "f", agent: tx.signer_id };
+  return { ...base, kind: "n", note: OWNER_CALLS[call.method_name] || ("called " + call.method_name) };
+}
+
+function renderActivity(rows, filter) {
+  const shown = rows.filter(r => filter === "all" || r.kind === filter);
+  if (!shown.length) return '<div class="glass pad"><span class="muted">Nothing to show for this filter yet.</span></div>';
+  return shown.map(r => {
+    const tag = { d:'<span class="tag d">Blocked</span>', a:'<span class="tag a">Allowed</span>',
+      f:'<span class="tag d">Rejected</span>', n:'<span class="tag n">Owner</span>' }[r.kind];
+    let what;
+    if (r.kind === "d" || r.kind === "a")
+      what = `<b>${esc(r.agent)}</b> asked to pay <b>${esc(r.amount)}</b> to <b>${esc(r.recipient)}</b>` +
+        `<div class="meta">${r.kind === "d" ? "reason · " + esc(r.reason) : "inside policy · transfer scheduled"}</div>` +
+        (r.memo ? `<div class="quote">“${esc(r.memo.length > 180 ? r.memo.slice(0, 180) + "…" : r.memo)}”</div>` : "");
+    else if (r.kind === "f")
+      what = `<b>${esc(r.agent)}</b> called <code>${esc(r.method)}</code> and the call was rejected` +
+        `<div class="meta">not a registered agent, or malformed input — nothing was recorded</div>`;
+    else what = `<b>${esc(r.signer)}</b> ${esc(r.note)}<div class="meta">${esc(r.method)}</div>`;
+    return `<div class="item"><div>${tag}</div><div class="what">${what}</div>
+      <div class="when"><span title="${new Date(r.when).toLocaleString()}">${ago(r.when)}</span>
+      <a target="_blank" rel="noopener" href="https://testnet.nearblocks.io/txns/${r.hash}">${short(r.hash)}</a></div></div>`;
+  }).join("");
+}
+
+/** Load the feed into #feed and its counters. Resolves to the decoded rows. */
+async function loadActivity(limit = 40) {
+  const list = await postJSON(TXAPI + "/account", { account_id: VAULT });
+  const hashes = (list.account_txs || []).filter(t => t.is_receiver && t.is_function_call)
+    .slice(0, limit).map(t => t.transaction_hash);
+  const full = [];
+  for (let i = 0; i < hashes.length; i += 20) {
+    const part = await postJSON(TXAPI + "/transactions", { tx_hashes: hashes.slice(i, i + 20) });
+    full.push(...(part.transactions || []));
+  }
+  return { total: list.txs_count,
+    rows: full.map(activityRow).filter(Boolean).sort((a, b) => b.when - a.when) };
+}
+
+/** Copy buttons: any element with data-copy copies the text of that target. */
+document.addEventListener("click", async e => {
+  const b = e.target.closest("[data-copy]");
+  if (!b) return;
+  const el = document.getElementById(b.dataset.copy);
+  try {
+    await navigator.clipboard.writeText(el ? el.textContent : "");
+    const was = b.textContent; b.textContent = "copied";
+    setTimeout(() => { b.textContent = was; }, 1400);
+  } catch { /* clipboard unavailable — the text is still selectable */ }
+});
+
+/** Navigation: mark the current page and wire the small-screen menu. */
+function initNav() {
   const here = location.pathname.split("/").pop() || "index.html";
   document.querySelectorAll(".nav-links a").forEach(a => {
-    if ((a.getAttribute("href") || "") === here) a.classList.add("on");
+    if ((a.getAttribute("href") || "") === here) { a.classList.add("on"); a.setAttribute("aria-current", "page"); }
+  });
+  const menu = document.getElementById("navmenu"), links = document.getElementById("navlinks");
+  if (menu && links) menu.addEventListener("click", () => {
+    const open = links.classList.toggle("open");
+    menu.setAttribute("aria-expanded", String(open));
   });
 }
-document.addEventListener("DOMContentLoaded", markNav);
+document.addEventListener("DOMContentLoaded", initNav);

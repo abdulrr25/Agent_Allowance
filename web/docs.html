@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Use it — Agent Allowance</title>
+<meta name="description" content="Set up your own vault: design a policy, get the exact commands, connect an agent in Python or over MCP, and read the full API reference.">
+<meta property="og:title" content="Use it — Agent Allowance">
+<meta property="og:description" content="Set up your own vault: design a policy, get the exact commands, connect an agent in Python or over MCP, and read the full API reference.">
+<meta property="og:type" content="website">
+<meta name="theme-color" content="#07080c">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%238b7cf6'/%3E%3Cstop offset='1' stop-color='%2338d5ee'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='8' fill='url%28%23g%29'/%3E%3Cg transform='translate%284 4%29' fill='none' stroke='%230a0b14' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 3l7 3v5c0 4.5-3 8.2-7 10-4-1.8-7-5.5-7-10V6l7-3z'/%3E%3Cpath d='M9.2 12.2l2 2 3.8-4'/%3E%3C/g%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;700&amp;display=swap">
+<link rel="stylesheet" href="assets/app.css?v=8">
+</head><body>
+<header class="nav"><div class="nav-in">
+  <a class="brand" href="index.html"><span class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5c0 4.5-3 8.2-7 10-4-1.8-7-5.5-7-10V6l7-3z"/><path d="M9.2 12.2l2 2 3.8-4"/></svg></span>Agent Allowance</a>
+  <nav class="nav-links" id="navlinks" aria-label="Primary">
+    <a href="index.html">Overview</a><a href="attack.html">Attack console</a><a href="activity.html">Activity</a><a href="proof.html">Proof</a><a href="flow.html">How it works</a><a href="docs.html">Use it</a>
+  </nav>
+  <div class="nav-cta">
+    <a class="iconlink" href="https://github.com/abdulrr25/Agent_Allowance" target="_blank" rel="noopener" aria-label="Source on GitHub"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 00-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.9 1.52 2.34 1.08 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.56-1.11-4.56-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02a9.6 9.6 0 015 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10 10 0 0012 2z"/></svg></a>
+    <a class="btn sm" href="attack.html">Try to break it</a>
+    <button class="menu" id="navmenu" type="button" aria-expanded="false" aria-controls="navlinks" aria-label="Menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+  </div>
+</div></header>
+
+<main id="main"><div class="shell">
+  <div class="hero tight">
+    <span class="badge">Guide and reference</span>
+    <h1>Put your own agent <span class="grad">on an allowance.</span></h1>
+    <p class="lede">Design a policy, get the exact commands to deploy it, and connect an agent.
+      Everything on this page runs against NEAR testnet with free faucet funds.</p>
+  </div>
+
+  <section>
+  <div class="docs">
+    <nav class="toc" aria-label="On this page">
+      <a href="#policy">Design a policy</a>
+      <a href="#test">Test a request</a>
+      <a href="#deploy">Deploy it</a>
+      <a href="#agent">Connect an agent</a>
+      <a href="#api">API reference</a>
+      <a href="#limits">What it does not solve</a>
+    </nav>
+
+    <div class="doc">
+      <section id="policy">
+        <h2>1 · Design a policy</h2>
+        <p>A policy belongs to one agent and one asset. Fill it in and the commands in
+          step 3 update as you type.</p>
+        <div class="glass pad">
+          <div class="two">
+            <div class="field"><label for="b-vault">Vault account (the owner)</label>
+              <input id="b-vault" value="my-vault.testnet" autocomplete="off" spellcheck="false"></div>
+            <div class="field"><label for="b-agent">Agent account</label>
+              <input id="b-agent" value="bot.my-vault.testnet" autocomplete="off" spellcheck="false"></div>
+          </div>
+          <label id="b-assetlabel">Asset</label>
+          <div class="seg" id="b-asset" role="group" aria-labelledby="b-assetlabel">
+            <button type="button" data-asset="near" class="sel">NEAR</button>
+            <button type="button" data-asset="usdc">USDC.e</button>
+          </div>
+          <div class="two">
+            <div class="field"><label for="b-tx">Most per payment</label>
+              <input id="b-tx" value="1" inputmode="decimal" autocomplete="off"></div>
+            <div class="field"><label for="b-day">Most per rolling 24 hours</label>
+              <input id="b-day" value="3" inputmode="decimal" autocomplete="off"></div>
+          </div>
+          <div class="field"><label for="b-list">May pay only (comma-separated accounts, up to 20)</label>
+            <input id="b-list" value="payee.my-vault.testnet" autocomplete="off" spellcheck="false"></div>
+          <div class="callout" id="b-summary" style="margin:6px 0 0"></div>
+        </div>
+      </section>
+
+      <section id="test">
+        <h2>2 · Test a request against it</h2>
+        <p>Evaluated in your browser, in the same order the contract checks. Nothing is sent.
+          To see the real contract decide, use the <a href="attack.html">attack console</a>.</p>
+        <div class="glass pad">
+          <div class="two">
+            <div class="field"><label for="t-to">Agent asks to pay</label>
+              <input id="t-to" value="attacker.testnet" autocomplete="off" spellcheck="false"></div>
+            <div class="field"><label for="t-amt">Amount</label>
+              <input id="t-amt" value="0.5" inputmode="decimal" autocomplete="off"></div>
+          </div>
+          <div class="field"><label for="t-spent">Already spent in the current 24-hour window</label>
+            <input id="t-spent" value="0" inputmode="decimal" autocomplete="off"></div>
+          <div class="ev" id="t-out" role="status" aria-live="polite" style="margin-top:4px"></div>
+        </div>
+      </section>
+
+      <section id="deploy">
+        <h2>3 · Deploy it</h2>
+        <p>Four steps with <a href="https://github.com/near/near-cli-rs" target="_blank" rel="noopener">near-cli-rs</a>.
+          The vault contract must already be deployed to the vault account —
+          <code>scripts/reproduce-demo.sh</code> does that and everything below in one run.</p>
+        <span class="stepno">STEP 1 — create the agent's account</span>
+        <div class="codewrap"><button class="copy" type="button" data-copy="c1">copy</button><pre class="code" id="c1"></pre></div>
+        <span class="stepno">STEP 2 — give it a key that can only ask the vault</span>
+        <div class="codewrap"><button class="copy" type="button" data-copy="c2">copy</button><pre class="code" id="c2"></pre></div>
+        <span class="stepno">STEP 3 — delete its full-access key</span>
+        <div class="codewrap"><button class="copy" type="button" data-copy="c3">copy</button><pre class="code" id="c3"></pre></div>
+        <div class="callout w"><b>This is the step that matters.</b> Until the full-access key
+          is gone, the agent account can still do anything. After it, the restricted key is the
+          only way to act as that account, and nobody — the owner included — can widen it.</div>
+        <span class="stepno">STEP 4 — register the policy (owner only, 1 yoctoNEAR attached)</span>
+        <div class="codewrap"><button class="copy" type="button" data-copy="c4">copy</button><pre class="code" id="c4"></pre></div>
+      </section>
+
+      <section id="agent">
+        <h2>4 · Connect an agent</h2>
+        <p>The agent needs two things: the vault's account id and its own restricted key.
+          It asks; the vault decides. A refusal returns a reason instead of failing, so the
+          agent can report why rather than retry blindly.</p>
+        <h3>From Python</h3>
+        <p>The client in this repository signs with the standard library — nothing to install.</p>
+        <div class="codewrap"><button class="copy" type="button" data-copy="c-py">copy</button><pre class="code" id="c-py">import os
+import nearlite as near          # scripts/nearlite.py — standard library only
+
+key = near.Key(os.environ["AGENT_KEY"])
+tx_hash, result = near.send(key, "bot.my-vault.testnet", "my-vault.testnet", [
+    near.function_call("request_spend", {
+        "recipient": "payee.my-vault.testnet",
+        "amount": "5000000000000000000000",      # yoctoNEAR
+        "memo": "monthly API credits",
+    })
+])
+print(near.events(result))   # spend_allowed, or spend_denied with a reason</pre></div>
+        <h3>From any MCP-capable agent</h3>
+        <p><code>scripts/mcp_server.py</code> exposes the vault as two tools,
+          <code>request_payment</code> and <code>get_policy</code>. The model can call them as
+          often as it likes; the limits are enforced on-chain, not by the model.</p>
+        <div class="codewrap"><button class="copy" type="button" data-copy="c-mcp">copy</button><pre class="code" id="c-mcp">{
+  "mcpServers": {
+    "agent-allowance": {
+      "command": "python3",
+      "args": ["/path/to/Agent_Allowance/scripts/mcp_server.py"],
+      "env": {
+        "AGENT_ACCOUNT": "bot.my-vault.testnet",
+        "AGENT_KEY": "ed25519:…",
+        "VAULT_ACCOUNT": "my-vault.testnet"
+      }
+    }
+  }
+}</pre></div>
+        <div class="callout"><b>Give the agent the restricted key only.</b> A function-call key
+          can be handed to a process you do not trust. A full-access key cannot.</div>
+      </section>
+
+      <section id="api">
+        <h2>API reference</h2>
+        <h3>Agent methods</h3>
+        <div class="tablewrap"><table><thead><tr><th>Method</th><th>What it does</th></tr></thead><tbody>
+          <tr><td><code>request_spend(recipient, amount, memo)</code></td><td>Ask to pay native NEAR. Returns <code>{allowed, reason}</code>; schedules a transfer only when allowed.</td></tr><tr><td><code>request_spend_ft(token_id, recipient, amount, memo)</code></td><td>The same, for an NEP-141 token the owner has opted in.</td></tr>
+        </tbody></table></div>
+        <h3>Owner methods — each requires 1 yoctoNEAR</h3>
+        <div class="tablewrap"><table><thead><tr><th>Method</th><th>What it does</th></tr></thead><tbody>
+          <tr><td><code>add_agent(agent_id, per_tx_cap, daily_cap, allowlist)</code></td><td>Register an agent with a native-NEAR policy.</td></tr><tr><td><code>update_policy(agent_id, per_tx_cap, daily_cap, allowlist)</code></td><td>Replace an agent's native-NEAR policy.</td></tr><tr><td><code>set_agent_enabled(agent_id, enabled)</code></td><td>Switch one agent off or on.</td></tr><tr><td><code>revoke_agent(agent_id)</code></td><td>Remove an agent entirely.</td></tr><tr><td><code>set_paused(paused)</code></td><td>The kill switch: pause or resume every agent.</td></tr><tr><td><code>add_token(token_id) · remove_token(token_id)</code></td><td>Start or stop accepting an NEP-141 token.</td></tr><tr><td><code>set_ft_policy(agent_id, token_id, per_tx_cap, daily_cap, allowlist)</code></td><td>Give an agent a policy for one token.</td></tr><tr><td><code>revoke_ft_policy(agent_id, token_id)</code></td><td>Remove that token policy.</td></tr><tr><td><code>withdraw(amount, to) · withdraw_ft(token_id, amount, to)</code></td><td>Take funds back out of the vault.</td></tr>
+        </tbody></table></div>
+        <h3>Views</h3>
+        <p><code>dashboard</code> returns the whole state in one call. Also:
+          <code>get_owner</code> · <code>is_paused</code> · <code>get_policy</code> ·
+          <code>get_agent_status</code> · <code>list_agents</code> · <code>vault_balance</code> ·
+          <code>available_balance</code> · <code>stats</code> · <code>get_ft_policy</code> ·
+          <code>ft_balance</code> · <code>list_tokens</code></p>
+        <h3>Why a request is denied</h3>
+        <div class="tablewrap"><table><thead><tr><th>Reason</th><th>Meaning</th></tr></thead><tbody>
+          <tr><td><code>vault_paused</code></td><td>The owner has pulled the kill switch.</td></tr><tr><td><code>agent_disabled</code></td><td>This agent is switched off.</td></tr><tr><td><code>amount_zero</code></td><td>The request asked for nothing.</td></tr><tr><td><code>exceeds_per_tx_cap</code></td><td>More than one payment may move.</td></tr><tr><td><code>exceeds_daily_cap</code></td><td>More than is left in the rolling 24-hour window.</td></tr><tr><td><code>recipient_not_allowlisted</code></td><td>The recipient is not an address the owner chose.</td></tr><tr><td><code>insufficient_vault_balance</code></td><td>The vault does not hold that much.</td></tr><tr><td><code>token_not_accepted</code></td><td>The owner has not opted this token in.</td></tr>
+        </tbody></table></div>
+        <p style="margin-top:14px">Checks run in that order, and the first failure decides. Every
+          decision is emitted as a NEP-297 event — <code>spend_allowed</code>,
+          <code>spend_denied</code>, <code>ft_spend_allowed</code>, <code>ft_spend_denied</code>
+          — under the standard name <code>agent_allowance</code>.</p>
+        <div class="callout w"><b>Live build.</b> <code>withdraw_ft</code> is in the contract and
+          covered by tests, but landed after the build currently deployed at
+          <code>agent-allowance.testnet</code>. It reaches the live vault on the next deploy.</div>
+      </section>
+
+      <section id="limits">
+        <h2>What it does not solve</h2>
+        <ul>
+          <li><b>A permitted but foolish payment.</b> If the agent may send 1 NEAR to an
+            allowlisted address, a tricked agent can still send it. The cap bounds the loss.</li>
+          <li><b>A stolen owner key.</b> The owner's full-access key controls the policy. That
+            is a different threat model.</li>
+          <li><b>Prompt injection itself.</b> It still works. It just achieves little.</li>
+          <li><b>Dollar limits on volatile assets.</b> Caps are in the token's own units; there
+            is no price oracle.</li>
+          <li><b>Unregistered token recipients.</b> NEP-141 needs storage registration; a
+            transfer to an unregistered account fails and the balance is credited back.</li>
+          <li><b>An exhausted agent key.</b> The key's gas allowance is finite and nothing on
+            the account can refill it. The funds are safe in the vault; the agent identity is
+            replaced.</li>
+          <li><b>An audit.</b> This is an unaudited testnet build. Do not put real funds
+            behind it without review.</li>
+        </ul>
+        <div class="btn-row" style="margin-top:22px">
+          <a class="btn" href="attack.html">Try to break it <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+          <a class="btn ghost" href="https://github.com/abdulrr25/Agent_Allowance" target="_blank" rel="noopener">Read the source ↗</a>
+        </div>
+      </section>
+    </div>
+  </div>
+  </section>
+</div></main>
+<footer><div class="shell">
+  <div class="foot">
+    <div>
+      <a class="brand" href="index.html"><span class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5c0 4.5-3 8.2-7 10-4-1.8-7-5.5-7-10V6l7-3z"/><path d="M9.2 12.2l2 2 3.8-4"/></svg></span>Agent Allowance</a>
+      <p class="blurb">Protocol-enforced spending limits for AI agents on NEAR. Assume the agent
+      is compromised; bound what it can do.</p>
+    </div>
+    <div><h4>Product</h4>
+      <a href="index.html">Overview</a><a href="attack.html">Attack console</a>
+      <a href="activity.html">Activity</a><a href="proof.html">Proof</a></div>
+    <div><h4>Learn</h4>
+      <a href="flow.html">How it works</a><a href="docs.html">Use it</a>
+      <a href="docs.html#api">API reference</a><a href="docs.html#limits">What it does not solve</a></div>
+    <div><h4>On-chain</h4>
+      <a href="https://testnet.nearblocks.io/address/agent-allowance.testnet" target="_blank" rel="noopener">agent-allowance.testnet ↗</a>
+      <a href="https://github.com/abdulrr25/Agent_Allowance" target="_blank" rel="noopener">Source on GitHub ↗</a>
+      <a href="https://github.com/abdulrr25/Agent_Allowance/blob/main/LICENSE" target="_blank" rel="noopener">MIT License ↗</a></div>
+  </div>
+  <div class="legal">
+    <span class="by">Built by <a href="https://github.com/abdulrr25" target="_blank" rel="noopener">abdulrr25</a>
+      for NEAR HACKATHON · November 2026</span>
+    <span>NEAR testnet · unaudited · <span>Unaudited testnet build</span></span>
+  </div>
+</div></footer>
+<script src="assets/app.js?v=5"></script>
+<script>
+const $ = id => document.getElementById(id);
+const B = { near: { dec: 24, unit: "NEAR", token: null },
+            usdc: { dec: 6, unit: "USDC.e", token: USDC } };
+let basset = "near";
+const ACCOUNT = /^(([a-z\d]+[-_])*[a-z\d]+\.)*([a-z\d]+[-_])*[a-z\d]+$/;
+const NET = "network-config testnet sign-with-legacy-keychain send";
+
+/** Read the builder form. Throws a readable message for the first problem. */
+function readPolicy() {
+  const cfg = B[basset];
+  const vault = $("b-vault").value.trim(), agent = $("b-agent").value.trim();
+  for (const [name, v] of [["Vault account", vault], ["Agent account", agent]])
+    if (v.length < 2 || v.length > 64 || !ACCOUNT.test(v))
+      throw new Error(`${name} "${v}" is not a valid NEAR account id.`);
+  const allowlist = $("b-list").value.split(/[\s,]+/).filter(Boolean);
+  if (!allowlist.length) throw new Error("Add at least one account the agent may pay.");
+  if (allowlist.length > 20) throw new Error("An allowlist holds at most 20 accounts.");
+  if (new Set(allowlist).size !== allowlist.length)
+    throw new Error("The allowlist names an account twice; the contract rejects duplicates.");
+  for (const a of allowlist)
+    if (a.length < 2 || a.length > 64 || !ACCOUNT.test(a))
+      throw new Error(`"${a}" is not a valid NEAR account id.`);
+  const perTx = toUnits($("b-tx").value.trim(), cfg.dec);
+  const daily = toUnits($("b-day").value.trim(), cfg.dec);
+  if (perTx > daily) throw new Error("The per-payment cap cannot exceed the daily cap.");
+  return { cfg, vault, agent, allowlist, perTx, daily };
+}
+
+/** The contract's checks, in the contract's order. */
+function evaluate(p, recipient, amount, spent) {
+  if (amount === 0n) return "amount_zero";
+  if (amount > p.perTx) return "exceeds_per_tx_cap";
+  if (spent + amount > p.daily) return "exceeds_daily_cap";
+  if (!p.allowlist.includes(recipient)) return "recipient_not_allowlisted";
+  return null;
+}
+const EXPLAIN = {
+  exceeds_per_tx_cap: "It asks for more than one payment may move.",
+  exceeds_daily_cap: "It would take the agent past its rolling 24-hour budget.",
+  recipient_not_allowlisted: "The recipient is not on the list the owner chose.",
+  amount_zero: "It asks for nothing."
+};
+
+function build() {
+  let p;
+  try { p = readPolicy(); }
+  catch (e) {
+    $("b-summary").innerHTML = `<span class="err">${esc(e.message)}</span>`;
+    ["c1", "c2", "c3", "c4"].forEach(id => { $(id).textContent = "# fix the policy above first"; });
+    $("t-out").textContent = "Fix the policy above first.";
+    return;
+  }
+  const u = p.cfg.unit;
+  $("b-summary").innerHTML = `<b>In words:</b> ${esc(p.agent)} may pay at most ` +
+    `<b>${esc($("b-tx").value.trim())} ${u}</b> at a time and ` +
+    `<b>${esc($("b-day").value.trim())} ${u}</b> in any 24 hours, and only to ` +
+    `<b>${p.allowlist.map(esc).join(", ")}</b>. Everything else is refused and recorded.`;
+  const methods = p.cfg.token ? "request_spend,request_spend_ft" : "request_spend";
+  $("c1").textContent =
+`near account create-account fund-myself ${p.agent} '1 NEAR' \\
+  autogenerate-new-keypair save-to-legacy-keychain \\
+  sign-as ${p.vault} ${NET}`;
+  $("c2").textContent =
+`near account add-key ${p.agent} \\
+  grant-function-call-access --allowance '0.25 NEAR' \\
+  --contract-account-id ${p.vault} --function-names '${methods}' \\
+  autogenerate-new-keypair save-to-legacy-keychain \\
+  ${NET}`;
+  $("c3").textContent =
+`# the public key printed by step 1
+near account delete-keys ${p.agent} public-keys <FULL_ACCESS_PUBLIC_KEY> \\
+  ${NET}`;
+  const call = (method, args) =>
+`near contract call-function as-transaction ${p.vault} ${method} \\
+  json-args '${JSON.stringify(args)}' \\
+  prepaid-gas '100.0 Tgas' attached-deposit '1 yoctoNEAR' \\
+  sign-as ${p.vault} ${NET}`;
+  const policy = { per_tx_cap: p.perTx.toString(), daily_cap: p.daily.toString(), allowlist: p.allowlist };
+  $("c4").textContent = p.cfg.token
+    ? ["# an agent must be registered with a native-NEAR policy first;\n" +
+       "# 1 yoctoNEAR makes that policy effectively nothing\n" +
+       call("add_agent", { agent_id: p.agent, per_tx_cap: "1", daily_cap: "1", allowlist: p.allowlist }),
+       "# accept the token, then set the policy that matters\n" +
+       call("add_token", { token_id: p.cfg.token }),
+       call("set_ft_policy", { agent_id: p.agent, token_id: p.cfg.token, ...policy })].join("\n\n")
+    : call("add_agent", { agent_id: p.agent, ...policy });
+
+  // the test request
+  const out = $("t-out");
+  try {
+    const to = $("t-to").value.trim();
+    const amount = toUnits($("t-amt").value.trim(), p.cfg.dec);
+    const spentStr = $("t-spent").value.trim();
+    const spent = /^0(\.0+)?$/.test(spentStr) ? 0n : toUnits(spentStr, p.cfg.dec);
+    const reason = evaluate(p, to, amount, spent);
+    out.innerHTML = reason
+      ? `<span class="verdict d">WOULD BE BLOCKED</span>\n<span class="k">reason</span>    <span class="deny">${reason}</span>\n\n${EXPLAIN[reason]}`
+      : `<span class="verdict a">WOULD BE ALLOWED</span>\n${esc($("t-amt").value.trim())} ${u} to ${esc(to)} is inside the policy.\n\nThis is the only kind of request that succeeds — whoever, or whatever, wrote it.`;
+  } catch (e) { out.innerHTML = `<span class="err">${esc(e.message)}</span>`; }
+}
+
+$("b-asset").onclick = e => {
+  const b = e.target.closest("button[data-asset]"); if (!b) return;
+  basset = b.dataset.asset;
+  [...document.querySelectorAll("#b-asset button")].forEach(x => x.classList.toggle("sel", x === b));
+  build();
+};
+["b-vault", "b-agent", "b-tx", "b-day", "b-list", "t-to", "t-amt", "t-spent"]
+  .forEach(id => $(id).addEventListener("input", build));
+build();
+</script>
+</body></html>

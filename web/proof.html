@@ -3,77 +3,108 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Proof — Agent Allowance</title>
 <meta name="description" content="Five real NEAR testnet transactions, each replayed live from its own on-chain NEP-297 event. Evidence, not screenshots.">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%238b5cf6'/%3E%3Cstop offset='1' stop-color='%2322d3ee'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='8' fill='url(%23g)'/%3E%3Ctext x='16' y='23' font-family='monospace' font-size='19' font-weight='700' text-anchor='middle' fill='%230b0514'%3EA%3C/text%3E%3C/svg%3E">
-<link rel="stylesheet" href="assets/app.css?v=3">
+<meta property="og:title" content="Proof — Agent Allowance">
+<meta property="og:description" content="Five real NEAR testnet transactions, each replayed live from its own on-chain NEP-297 event. Evidence, not screenshots.">
+<meta property="og:type" content="website">
+<meta name="theme-color" content="#07080c">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%238b7cf6'/%3E%3Cstop offset='1' stop-color='%2338d5ee'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='8' fill='url%28%23g%29'/%3E%3Cg transform='translate%284 4%29' fill='none' stroke='%230a0b14' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 3l7 3v5c0 4.5-3 8.2-7 10-4-1.8-7-5.5-7-10V6l7-3z'/%3E%3Cpath d='M9.2 12.2l2 2 3.8-4'/%3E%3C/g%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;700&amp;display=swap">
+<link rel="stylesheet" href="assets/app.css?v=8">
 </head><body>
-<nav class="nav"><div class="nav-in">
-    <a class="brand" href="index.html"><span class="mark">A</span>Agent Allowance</a>
-    <div class="nav-links">
-      <a href="index.html">Overview</a>
-      <a href="attack.html">Attack it</a>
-      <a href="proof.html">Proof</a>
-      <a href="flow.html">How it works</a>
-      <a href="https://github.com/abdulrr25/Agent_Allowance" target="_blank" rel="noopener">GitHub ↗</a>
-    </div></div></nav>
-<main class="shell">
-  <div class="hero">
+<header class="nav"><div class="nav-in">
+  <a class="brand" href="index.html"><span class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5c0 4.5-3 8.2-7 10-4-1.8-7-5.5-7-10V6l7-3z"/><path d="M9.2 12.2l2 2 3.8-4"/></svg></span>Agent Allowance</a>
+  <nav class="nav-links" id="navlinks" aria-label="Primary">
+    <a href="index.html">Overview</a><a href="attack.html">Attack console</a><a href="activity.html">Activity</a><a href="proof.html">Proof</a><a href="flow.html">How it works</a><a href="docs.html">Use it</a>
+  </nav>
+  <div class="nav-cta">
+    <a class="iconlink" href="https://github.com/abdulrr25/Agent_Allowance" target="_blank" rel="noopener" aria-label="Source on GitHub"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 00-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.9 1.52 2.34 1.08 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.56-1.11-4.56-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02a9.6 9.6 0 015 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10 10 0 0012 2z"/></svg></a>
+    <a class="btn sm" href="attack.html">Try to break it</a>
+    <button class="menu" id="navmenu" type="button" aria-expanded="false" aria-controls="navlinks" aria-label="Menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+  </div>
+</div></header>
+
+<main id="main"><div class="shell">
+  <div class="hero tight">
     <span class="badge">Evidence, not screenshots</span>
-    <h1 style="margin-top:22px">Every claim, <span class="grad">checkable</span>.</h1>
+    <h1>Every claim, <span class="grad">checkable.</span></h1>
     <p class="lede">Each block below is the contract's own NEP-297 event, fetched live from
-      its transaction record. Nothing here is a picture of a result.</p>
+      its transaction record on an archival node. Nothing here is a picture of a result.</p>
   </div>
 
   <section>
-    <div class="sec">Five transactions on testnet <span class="live" id="livetag">reading chain…</span></div>
-    <div id="proofs"></div>
+    <div class="sec">Five recorded transactions <span class="small" id="livetag">reading chain…</span></div>
+    <div class="grid" id="proofs"></div>
   </section>
 
-  <section>
-    <div class="sec">Verify it yourself</div>
-    <div class="glass pad">
-      <h2>One command, nothing installed</h2>
-      <p class="muted">No keys, no Rust, no npm, and it signs nothing. It checks that each
-      agent holds exactly one key — the published one included — that those keys are
-      protocol-limited to this vault, reads the live policy, confirms the vault really holds
-      the stablecoin it governs, replays all five transactions, and confirms that the one
-      private key in the repository is that restricted key. Twenty-seven checks, none of
-      them ours to fake.</p>
-      <div class="ev" style="margin-top:18px">python3 scripts/verify.py
-
-<span class="k">2. Agent keys are restricted by the NEAR protocol</span>
-
-   aa-agent.testnet
-  <span class="allow">PASS</span>  aa-agent.testnet holds exactly one access key
-  <span class="allow">PASS</span>  no full-access key exists on aa-agent.testnet
-  <span class="allow">PASS</span>  key is limited to request_spend, request_spend_ft
-  <span class="allow">PASS</span>  key is limited to the vault contract
-  …
-<span class="k">Summary</span>
-  27 passed, 0 failed</div>
-      <div class="btn-row" style="margin-top:22px">
-        <a class="btn ghost" href="https://github.com/abdulrr25/Agent_Allowance" target="_blank" rel="noopener">Read the source ↗</a>
-        <a class="btn" href="attack.html">Attack it yourself →</a>
-      </div>
+  <section class="section-lg">
+    <div class="head">
+      <span class="eyebrow">Verify it yourself</span>
+      <h2>Three commands, nothing installed.</h2>
+      <p class="lede">Python's standard library only — no packages, no wallet, no account.</p>
+    </div>
+    <div class="grid g3">
+      <div class="glass pad"><h3>Read</h3>
+        <p class="muted">27 read-only checks: each agent holds exactly one restricted key, the
+        policy is live, the vault holds the stablecoin it governs, and the five transactions
+        say what this page says.</p>
+        <div class="term" style="margin-top:16px"><span class="p">$</span> <span class="c">python3 scripts/verify.py</span>
+27 passed, 0 failed</div></div>
+      <div class="glass pad"><h3>Attack</h3>
+        <p class="muted">Nine signed attacks with the agent's real key, then one legitimate
+        payment. Exits non-zero if any attack gets through.</p>
+        <div class="term" style="margin-top:16px"><span class="p">$</span> <span class="c">python3 scripts/redteam.py</span>
+9 of 9 attacks stopped</div></div>
+      <div class="glass pad"><h3>Test</h3>
+        <p class="muted">36 unit tests on policy and authorization, and 14 sandbox tests that
+        settle real transfers and callbacks on a local NEAR node.</p>
+        <div class="term" style="margin-top:16px"><span class="p">$</span> <span class="c">cargo test</span>
+36 passed · 14 passed</div></div>
+    </div>
+    <div class="btn-row" style="margin-top:24px">
+      <a class="btn ghost" href="https://github.com/abdulrr25/Agent_Allowance" target="_blank" rel="noopener">Read the source ↗</a>
+      <a class="btn" href="attack.html">Attack it yourself <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
     </div>
   </section>
 
-  <section>
-    <div class="sec">What this does not solve</div>
-    <div class="glass pad">
-      <p class="muted" style="max-width:74ch">Stated plainly, because a security tool that
-      overclaims is worse than none.</p>
-      <div class="rows" style="margin-top:16px">
-        <div class="row"><span class="k">Permitted but foolish spends</span><span class="v">not prevented — only bounded</span></div>
-        <div class="row"><span class="k">A stolen owner key</span><span class="v">different threat model</span></div>
-        <div class="row"><span class="k">Prompt injection itself</span><span class="v">still works; it just achieves little</span></div>
-        <div class="row"><span class="k">Token caps</span><span class="v">nominal units, no price oracle</span></div>
-        <div class="row"><span class="k">Audit status</span><span class="v">unaudited testnet build</span></div>
-      </div>
+  <section class="section-lg">
+    <div class="head">
+      <span class="eyebrow">The key in the repository</span>
+      <h2>One private key is public, on purpose.</h2>
+      <p class="lede">It is the agent's restricted key. <code>verify.py</code> scans the
+        repository, confirms it is the only private key present, derives its public half and
+        checks that it is the sole key of <code>aa-agent.testnet</code> on-chain.</p>
     </div>
+    <div class="term"><span class="k">5. The private key published in this repository</span>
+  <span class="p">PASS</span>  exactly one private key is present in the working tree
+  <span class="p">PASS</span>  it is the sole key of aa-agent.testnet, the one restricted to the vault</div>
   </section>
-</main>
-<footer class="shell"><span>Live on NEAR testnet · <code>agent-allowance.testnet</code></span>
-  <span id="updated">—</span></footer>
-<script src="assets/app.js?v=3"></script>
+</div></main>
+<footer><div class="shell">
+  <div class="foot">
+    <div>
+      <a class="brand" href="index.html"><span class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5c0 4.5-3 8.2-7 10-4-1.8-7-5.5-7-10V6l7-3z"/><path d="M9.2 12.2l2 2 3.8-4"/></svg></span>Agent Allowance</a>
+      <p class="blurb">Protocol-enforced spending limits for AI agents on NEAR. Assume the agent
+      is compromised; bound what it can do.</p>
+    </div>
+    <div><h4>Product</h4>
+      <a href="index.html">Overview</a><a href="attack.html">Attack console</a>
+      <a href="activity.html">Activity</a><a href="proof.html">Proof</a></div>
+    <div><h4>Learn</h4>
+      <a href="flow.html">How it works</a><a href="docs.html">Use it</a>
+      <a href="docs.html#api">API reference</a><a href="docs.html#limits">What it does not solve</a></div>
+    <div><h4>On-chain</h4>
+      <a href="https://testnet.nearblocks.io/address/agent-allowance.testnet" target="_blank" rel="noopener">agent-allowance.testnet ↗</a>
+      <a href="https://github.com/abdulrr25/Agent_Allowance" target="_blank" rel="noopener">Source on GitHub ↗</a>
+      <a href="https://github.com/abdulrr25/Agent_Allowance/blob/main/LICENSE" target="_blank" rel="noopener">MIT License ↗</a></div>
+  </div>
+  <div class="legal">
+    <span class="by">Built by <a href="https://github.com/abdulrr25" target="_blank" rel="noopener">abdulrr25</a>
+      for NEAR HACKATHON · November 2026</span>
+    <span>NEAR testnet · unaudited · <span id="updated">reading chain…</span></span>
+  </div>
+</div></footer>
+<script src="assets/app.js?v=5"></script>
 <script>loadProofs();</script>
 </body></html>

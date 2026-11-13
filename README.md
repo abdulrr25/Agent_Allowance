@@ -369,6 +369,12 @@ The honest claim is **blast-radius containment**, not invulnerability.
 
 ## API
 
+The build live at `agent-allowance.testnet` is the one `verify.py` checks and
+the one the attack console signs against. `withdraw_ft` landed after that
+deploy: it is in the contract, covered by unit and sandbox tests, and reaches
+the live vault on the next deploy. No stored field changed, so that deploy
+needs no migration.
+
 **Owner only** — each requires 1 yoctoNEAR:
 `add_agent` · `update_policy` · `set_agent_enabled` · `revoke_agent` ·
 `set_paused` · `withdraw` · `withdraw_ft` · `add_token` · `remove_token` ·

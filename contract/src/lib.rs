@@ -841,7 +841,11 @@ impl Contract {
             .filter_map(|token_id| {
                 let p = self.ft_policies.get(&ft_key(&agent_id, token_id))?.clone();
                 let elapsed = now.saturating_sub(p.window_start_ns.0);
-                let spent = if elapsed >= DAY_NS { 0 } else { p.spent_in_window.0 };
+                let spent = if elapsed >= DAY_NS {
+                    0
+                } else {
+                    p.spent_in_window.0
+                };
                 Some(FtStatus {
                     token_id: token_id.clone(),
                     remaining_today: U128(p.daily_cap.0.saturating_sub(spent)),

@@ -5,7 +5,26 @@
 Protocol-enforced spending limits for AI agents on NEAR. Live on testnet at
 [`agent-allowance.testnet`](https://explorer.testnet.near.org/accounts/agent-allowance.testnet).
 
-Verify every claim below yourself — no keys, no Rust, no npm, nothing to install:
+## Attack it yourself
+
+Open the dashboard and you will find **a real NEAR private key published in the
+page**. It belongs to `aa-playground.testnet`, a live agent registered against
+this vault. Type your own prompt-injection text, point it at any address you
+like, and sign a genuine testnet transaction from your browser.
+
+It will fail. Every time.
+
+That key is a NEAR **FunctionCall** key restricted to `request_spend` on this
+vault. By protocol it cannot attach tokens and cannot call any other contract
+on NEAR, and the account holds no full-access key. Publishing it is not an
+oversight — it is the entire argument, stated in the strongest form available:
+here is the key, the money is behind it, and you still cannot take it.
+
+```bash
+cd web && python3 -m http.server 8787   # then open http://127.0.0.1:8787
+```
+
+Or verify everything without a browser — no keys, no Rust, no npm:
 
 ```bash
 python3 scripts/verify.py
@@ -204,6 +223,18 @@ It also replays the three proof transactions by fetching each one's NEP-297
 event straight from its transaction record, so the attack shown on the page is
 the contract's own output rather than a screenshot — including the injected
 text the compromised agent submitted.
+
+The attack console at the top signs with the published playground key. That
+agent is capped at 0.01 NEAR per transaction and 0.1 NEAR per day to a single
+allowlisted address, so the worst a visitor can do is move a rounding error
+between two accounts we control. Its key carries a 5 NEAR gas allowance, which
+pays for roughly twenty thousand rejected attempts before the key exhausts
+itself — a bound the protocol enforces, not us.
+
+Transactions are built and signed explicitly rather than via
+`account.functionCall()`. That wrapper resolves access keys through a path that
+mishandles the BigInt values this RPC returns, and hangs in a silent
+nonce-retry loop rather than failing.
 
 The contract exposes a single `dashboard()` view returning the whole page state
 in one call. Deliberate: one RPC request per field gets throttled by public

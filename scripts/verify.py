@@ -2,23 +2,28 @@
 """
 Verify every claim Agent Allowance makes, directly against NEAR testnet.
 
-Requires only Python 3 — no keys, no Rust, no npm, no packages, no setup.
+Read-only: it signs nothing and spends nothing. Requires only Python 3 — no
+keys, no Rust, no npm, no packages, no setup.
 
     python3 scripts/verify.py
 """
-import base64
 import json
+import os
+import re
 import sys
-import time
-import urllib.error
-import urllib.request
 
-RPCS = ["https://rpc.testnet.near.org", "https://test.rpc.fastnear.com"]
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import nearlite as near  # noqa: E402
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 VAULT = "agent-allowance.testnet"
 AGENT = "bot.agent-allowance.testnet"
 # The agent whose private key is published on the attack page. Everything the
 # site claims about that key is checked here, against the chain.
 PLAYGROUND = "aa-agent.testnet"
+# An earlier playground agent. Its key was published too and is still in this
+# repository's git history, so it is held to the same standard.
+RETIRED = "aa-playground.testnet"
 TOKEN = "usdc.fakes.testnet"
 YOCTO = 10**24
 
@@ -46,58 +51,17 @@ def check(passed, msg):
     print(f"  {c('32','PASS') if passed else c('31','FAIL')}  {msg}")
 
 
-def rpc(payload, attempts=4):
-    """POST to NEAR RPC with retry and endpoint fallback.
-
-    Public endpoints throttle bursts, so back off rather than treating the
-    first refusal as a failed claim.
-    """
-    last = None
-    for endpoint in RPCS:
-        for attempt in range(attempts):
-            try:
-                req = urllib.request.Request(
-                    endpoint,
-                    data=json.dumps(payload).encode(),
-                    headers={"Content-Type": "application/json"},
-                )
-                with urllib.request.urlopen(req, timeout=30) as r:
-                    body = json.loads(r.read().decode())
-                if "error" in body:
-                    last = body["error"]
-                    time.sleep(0.6 * (attempt + 1))
-                    continue
-                return body["result"]
-            except Exception as e:                      # noqa: BLE001
-                last = e
-                time.sleep(0.6 * (attempt + 1))
-    raise RuntimeError(f"all RPC endpoints failed: {last}")
-
-
 def view(method, args=None):
-    res = rpc({
-        "jsonrpc": "2.0", "id": 1, "method": "query",
-        "params": {
-            "request_type": "call_function", "finality": "final",
-            "account_id": VAULT, "method_name": method,
-            "args_base64": base64.b64encode(
-                json.dumps(args or {}).encode()).decode(),
-        },
-    })
-    return json.loads(bytes(res["result"]).decode())
+    return near.view(VAULT, method, args)
 
 
-def near(y): return int(y) / YOCTO
+def to_near(y): return int(y) / YOCTO
 
 
 def check_key(account, expected_methods):
     """Assert an agent account holds exactly one protocol-restricted key."""
     print(f"\n   {account}")
-    keys = rpc({
-        "jsonrpc": "2.0", "id": 1, "method": "query",
-        "params": {"request_type": "view_access_key_list",
-                   "finality": "final", "account_id": account},
-    })["keys"]
+    keys = near.access_keys(account)
     full = [k for k in keys if k["access_key"]["permission"] == "FullAccess"]
     fc = [k for k in keys if k["access_key"]["permission"] != "FullAccess"]
     for k in fc:
@@ -108,7 +72,7 @@ def check_key(account, expected_methods):
         # An allowance may legitimately be null, meaning unlimited gas. It is
         # still gas only: no function-call key can attach a token deposit.
         print("        allowance: " + (
-            f"{near(allowance):.2f} NEAR (gas only — a function-call key "
+            f"{to_near(allowance):.2f} NEAR (gas only — a function-call key "
             "cannot move tokens)" if allowance else
             "unlimited gas — still cannot move tokens"))
     perm = fc[0]["access_key"]["permission"]["FunctionCall"] if len(fc) == 1 else {}
@@ -133,8 +97,8 @@ def main():
         check(False, f"contract did not respond: {e}")
         return summary()
     check(bool(d.get("owner_id")), f"owner is {d['owner_id']}")
-    print(f"        vault available : {near(d['available_balance']):.2f} NEAR")
-    print(f"        total spent     : {near(d['total_spent']):.2f} NEAR")
+    print(f"        vault available : {to_near(d['available_balance']):.2f} NEAR")
+    print(f"        total spent     : {to_near(d['total_spent']):.2f} NEAR")
     print(f"        attempts blocked: {d['total_denied']}")
     print(f"        kill switch     : {'PAUSED' if d['paused'] else 'active'}")
 
@@ -144,6 +108,7 @@ def main():
     print("   only its named methods on the vault — nothing else on NEAR.")
     check_key(AGENT, ["request_spend"])
     check_key(PLAYGROUND, ["request_spend", "request_spend_ft"])
+    check_key(RETIRED, ["request_spend"])
 
     # 3 ------------------------------------------------- policy is enforced
     print(bold("\n3. Spending policy is live on-chain"))
@@ -152,8 +117,8 @@ def main():
         check(False, f"{AGENT} is registered")
     else:
         p = agent["policy"]
-        print(f"        per-tx cap : {near(p['per_tx_cap']):.2f} NEAR")
-        print(f"        daily cap  : {near(p['daily_cap']):.2f} NEAR")
+        print(f"        per-tx cap : {to_near(p['per_tx_cap']):.2f} NEAR")
+        print(f"        daily cap  : {to_near(p['daily_cap']):.2f} NEAR")
         print(f"        allowlist  : {', '.join(p['allowlist'])}")
         print(f"        allowed    : {p['allowed_count']}")
         print(f"        blocked    : {p['denied_count']}")
@@ -185,8 +150,7 @@ def main():
     print(bold("\n4. Recorded outcomes of five real transactions"))
     for tx_hash, signer, expect, label in PROOFS:
         try:
-            out = rpc({"jsonrpc": "2.0", "id": 1, "method": "tx",
-                       "params": [tx_hash, signer]})
+            out = near.transaction(tx_hash, signer)
             logs = [l for o in out.get("receipts_outcome", [])
                     for l in o["outcome"]["logs"] if "EVENT_JSON" in l]
             events = []
@@ -204,7 +168,43 @@ def main():
         except Exception as e:                          # noqa: BLE001
             check(False, f"{label}: {e}")
 
+    # 5 ------------------------------------------- the key in this repository
+    print(bold("\n5. The private key published in this repository"))
+    print("   Claim: the repository contains exactly one private key, and it is")
+    print(f"   the restricted key of {PLAYGROUND} checked above — nothing more.")
+    found = scan_for_secrets()
+    for secret, files in found.items():
+        print(f"        {secret[:16]}…  in {', '.join(sorted(files))}")
+    check(len(found) == 1, "exactly one private key is present in the working tree")
+    onchain = [k["public_key"] for k in near.access_keys(PLAYGROUND)]
+    derived = [near.Key(s).public for s in found]
+    check(len(derived) == 1 and derived == onchain,
+          f"it is the sole key of {PLAYGROUND}, the one restricted to the vault")
+
     summary()
+
+
+def scan_for_secrets():
+    """Every ed25519 secret key in the repository's text files, by file."""
+    pattern = re.compile(r"ed25519:[1-9A-HJ-NP-Za-km-z]{80,90}")
+    skip = {"target", "node_modules", "__pycache__"}
+    found = {}
+    for folder, dirs, files in os.walk(ROOT):
+        # Hidden directories are tool state, not project source — except the
+        # CI configuration, which is part of what gets published.
+        dirs[:] = [d for d in dirs if d not in skip
+                   and (not d.startswith(".") or d == ".github")]
+        for name in files:
+            path = os.path.join(folder, name)
+            try:
+                text = open(path, encoding="utf-8").read()
+            except (UnicodeDecodeError, OSError):
+                continue
+            # A key may be wrapped across adjacent string literals in source.
+            joined = re.sub(r'"\s*\n\s*"', "", text)
+            for secret in set(pattern.findall(text)) | set(pattern.findall(joined)):
+                found.setdefault(secret, set()).add(os.path.relpath(path, ROOT))
+    return found
 
 
 def summary():

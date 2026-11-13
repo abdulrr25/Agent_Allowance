@@ -4,7 +4,7 @@
 <title>Agent Allowance — spending limits for AI agents on NEAR</title>
 <meta name="description" content="Protocol-enforced spending limits for AI agents on NEAR. Assume the agent is compromised; bound the damage.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%238b5cf6'/%3E%3Cstop offset='1' stop-color='%2322d3ee'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='8' fill='url(%23g)'/%3E%3Ctext x='16' y='23' font-family='monospace' font-size='19' font-weight='700' text-anchor='middle' fill='%230b0514'%3EA%3C/text%3E%3C/svg%3E">
-<link rel="stylesheet" href="assets/app.css?v=2">
+<link rel="stylesheet" href="assets/app.css?v=3">
 </head><body>
 <nav class="nav"><div class="nav-in">
     <a class="brand" href="index.html"><span class="mark">A</span>Agent Allowance</a>
@@ -28,7 +28,8 @@
     </div>
     <div class="chips">
       <span class="chip"><b>assets</b> NEAR + NEP-141</span>
-      <span class="chip"><b>tests</b> 71 checks passing</span>
+      <span class="chip"><b>tests</b> 36 unit · 14 sandbox · 27 on-chain</span>
+      <span class="chip"><b>red team</b> 9 live attacks, 9 stopped</span>
       <span class="chip"><b>audited</b> no — testnet build</span>
     </div>
   </div>
@@ -72,15 +73,16 @@
       <p class="muted" style="max-width:72ch">Security has to live <em>below</em> the AI,
       where words cannot reach it. The agent never holds the money. It holds a key that can
       do exactly one thing: ask a vault to spend, within rules written as code.</p>
-      <div class="grid g2" style="margin-top:22px">
+      <div id="pipe" style="margin-top:24px"></div>
+      <div class="grid g2" style="margin-top:26px">
         <div>
-          <div class="sec" style="margin-bottom:10px">Layer 1 · the NEAR protocol</div>
+          <div class="sec" style="margin-bottom:10px;color:#a78bfa">Gate 1 · the NEAR protocol</div>
           <p class="muted">A FunctionCall key cannot attach tokens and is locked to a single
           contract. A fully leaked agent key cannot move value itself, cannot reach a DEX,
           and cannot touch anything else on NEAR. Enforced by the network, not by us.</p>
         </div>
         <div>
-          <div class="sec" style="margin-bottom:10px">Layer 2 · the vault contract</div>
+          <div class="sec" style="margin-bottom:10px;color:#67e8f9">Gate 2 · the vault contract</div>
           <p class="muted">Per-transaction cap, rolling 24-hour cap, recipient allowlist,
           per-agent toggle and a global kill switch — applied identically to native NEAR and
           to every NEP-141 token.</p>
@@ -93,6 +95,35 @@
   </section>
 
   <section>
+    <div class="sec">Check it yourself</div>
+    <div class="grid g2">
+      <div class="glass pad">
+        <h2>Attack it</h2>
+        <p class="muted">Nine attacks signed with the agent's real key: six that try to go
+        around the vault, three that try to go through it. In the browser, or from a terminal
+        with nothing installed.</p>
+        <div class="term" style="margin-top:14px"><span class="p">$</span> <span class="c">python3 scripts/redteam.py</span>
+<span class="l1">6 stopped by the network</span>
+<span class="l2">3 stopped by the vault</span>
+9 of 9 attacks stopped</div>
+        <div class="btn-row" style="margin-top:18px">
+          <a class="btn danger" href="attack.html">Open the attack console →</a></div>
+      </div>
+      <div class="glass pad">
+        <h2>Verify it</h2>
+        <p class="muted">A read-only check of every claim on this site against the chain:
+        the keys, the policy, the balances, the five recorded transactions, and that the one
+        private key in the repository is the restricted one.</p>
+        <div class="term" style="margin-top:14px"><span class="p">$</span> <span class="c">python3 scripts/verify.py</span>
+…
+27 passed, 0 failed</div>
+        <div class="btn-row" style="margin-top:18px">
+          <a class="btn ghost" href="proof.html">See the evidence</a></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
     <div class="sec">Agents under policy</div>
     <div id="agents"><div class="glass pad"><div class="skel" style="height:110px"></div></div></div>
   </section>
@@ -100,6 +131,14 @@
 </main>
 <footer class="shell"><span>Live on NEAR testnet · <code>agent-allowance.testnet</code></span>
   <span id="updated">—</span></footer>
-<script src="assets/app.js?v=2"></script>
-<script>loadDashboard();setInterval(loadDashboard,30000);</script>
+<script src="assets/app.js?v=3"></script>
+<script>
+document.getElementById("pipe").innerHTML = pipeHTML({
+  key:   "Assume it is fully compromised. It holds one key and no money.",
+  net:   "One contract, named methods, no deposits. Anything else is refused.",
+  vault: "Per-payment cap, rolling daily cap, allowlist, kill switch.",
+  money: "Only what the owner's policy permits, to addresses the owner chose."
+}, "static");
+loadDashboard(); setInterval(loadDashboard, 30000);
+</script>
 </body></html>

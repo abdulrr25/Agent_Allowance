@@ -287,7 +287,8 @@ const OWNER_CALLS = { add_agent:"registered an agent", update_policy:"changed a 
   set_paused:"used the kill switch", withdraw:"withdrew NEAR", withdraw_ft:"withdrew tokens",
   add_token:"accepted a token", remove_token:"stopped accepting a token",
   set_ft_policy:"set a token policy", revoke_ft_policy:"revoked a token policy",
-  ft_on_transfer:"received a token deposit", new:"initialised the vault",
+  ft_on_transfer:"received a token deposit", ft_transfer_call:"deposited tokens into the vault",
+  new:"initialised the vault",
   migrate:"migrated the vault" };
 
 async function postJSON(url, body) {
@@ -335,7 +336,8 @@ function renderActivity(rows, filter) {
   if (!shown.length) return '<div class="glass pad"><span class="muted">Nothing to show for this filter yet.</span></div>';
   return shown.map(r => {
     const tag = { d:'<span class="tag d">Blocked</span>', a:'<span class="tag a">Allowed</span>',
-      f:'<span class="tag d">Rejected</span>', n:'<span class="tag n">Owner</span>' }[r.kind];
+      f:'<span class="tag d">Rejected</span>',
+      n:`<span class="tag n">${r.signer === VAULT ? "Owner" : "Other"}</span>` }[r.kind];
     let what;
     if (r.kind === "d" || r.kind === "a")
       what = `<b>${esc(r.agent)}</b> asked to pay <b>${esc(r.amount)}</b> to <b>${esc(r.recipient)}</b>` +
@@ -352,7 +354,7 @@ function renderActivity(rows, filter) {
 }
 
 /** Load the feed into #feed and its counters. Resolves to the decoded rows. */
-async function loadActivity(limit = 40) {
+async function loadActivity(limit = 100) {
   const list = await postJSON(TXAPI + "/account", { account_id: VAULT });
   const hashes = (list.account_txs || []).filter(t => t.is_receiver && t.is_function_call)
     .slice(0, limit).map(t => t.transaction_hash);
@@ -361,8 +363,10 @@ async function loadActivity(limit = 40) {
     const part = await postJSON(TXAPI + "/transactions", { tx_hashes: hashes.slice(i, i + 20) });
     full.push(...(part.transactions || []));
   }
-  return { total: list.txs_count,
-    rows: full.map(activityRow).filter(Boolean).sort((a, b) => b.when - a.when) };
+  // The indexer can return a transaction more than once; keep the first.
+  const seen = new Set();
+  const rows = full.map(activityRow).filter(r => r && !seen.has(r.hash) && seen.add(r.hash));
+  return { total: list.txs_count, rows: rows.sort((a, b) => b.when - a.when) };
 }
 
 /** Copy buttons: any element with data-copy copies the text of that target. */

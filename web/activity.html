@@ -46,7 +46,7 @@
         <button type="button" data-f="all" class="sel">All</button>
         <button type="button" data-f="d">Blocked</button>
         <button type="button" data-f="a">Allowed</button>
-        <button type="button" data-f="n">Owner</button>
+        <button type="button" data-f="n">Owner and setup</button>
       </div>
       <button class="btn ghost sm" id="refresh" type="button">Refresh</button>
     </div>
@@ -55,7 +55,7 @@
       <div class="glass pad"><div class="skel" style="height:54px"></div></div>
       <div class="glass pad"><div class="skel" style="height:54px"></div></div>
     </div>
-    <p class="small" style="margin-top:18px">Showing the most recent calls. Attacks the network
+    <p class="small" style="margin-top:18px">Showing the hundred most recent calls. Attacks the network
       refuses never appear here: they are never included in a block, so there is nothing to
       record. Try one on the <a href="attack.html">attack console</a> and watch a vault refusal
       arrive in this list.</p>
@@ -85,7 +85,7 @@
     <span>NEAR testnet · unaudited · <span id="updated">reading chain…</span></span>
   </div>
 </div></footer>
-<script src="assets/app.js?v=5"></script>
+<script src="assets/app.js?v=7"></script>
 <script>
 let rows = [], filter = "all";
 const feed = document.getElementById("feed");
@@ -98,7 +98,7 @@ async function refresh() {
   const btn = document.getElementById("refresh");
   btn.disabled = true;
   try {
-    const [act, dash] = await Promise.all([loadActivity(40), view("dashboard")]);
+    const [act, dash] = await Promise.all([loadActivity(100), view("dashboard")]);
     rows = act.rows;
     document.getElementById("c-total").textContent = act.total;
     document.getElementById("c-denied").textContent = dash.total_denied;

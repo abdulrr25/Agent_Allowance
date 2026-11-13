@@ -151,7 +151,7 @@ Summary
   </div>
 </div></footer>
 <script src="https://cdn.jsdelivr.net/npm/near-api-js@4.0.3/dist/near-api-js.min.js"></script>
-<script src="assets/app.js?v=5"></script>
+<script src="assets/app.js?v=7"></script>
 <script>
 const AGENT_KEY="ed25519:dmA2aFjMVuTGSfkcAHLavZs7zXRhFjraP3xF6pZgLH7gdPVJvn9aMazSovmpmB1CPvLa3EAhJupSHoE1zuaAbQb";
 const ATTACKER="attacker.testnet";
@@ -361,7 +361,7 @@ async function go(){
   if(busy||!signer)return;
   const a=ATTACKS.find(x=>x.id===current), out=$("out");
   let tx;
-  try{tx=txFor(a);}catch(e){out.innerHTML=`<span class="err">${esc(e.message)}</span>`;return;}
+  try{tx=txFor(a);}catch(e){idlePipe();out.innerHTML=`<span class="err">${esc(e.message)}</span>`;return;}
   busy=true;$("go").disabled=true;
   setPipe({key:"pass",net:"run"},{key:"signed in your browser",net:"deciding…",
     vault:"waiting",money:"waiting"});

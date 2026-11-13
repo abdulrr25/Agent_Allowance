@@ -52,14 +52,14 @@ jobs:
         run: python3 scripts/verify.py
 
   client:
-    name: client — signing code against RFC 8032
+    name: client — signing code and MCP server
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Offline tests for the standard-library NEAR client
+      - name: Offline tests for the Python tooling
         run: python3 scripts/test_nearlite.py
       - name: Scripts compile
-        run: python3 -m py_compile scripts/nearlite.py scripts/verify.py scripts/redteam.py
+        run: python3 -m py_compile scripts/nearlite.py scripts/verify.py scripts/redteam.py scripts/mcp_server.py
 
   web:
     name: web — script syntax and asset integrity
@@ -84,9 +84,12 @@ jobs:
                   print(("OK   " if r.returncode == 0 else "FAIL ") + f"{page} inline#{i}")
                   if r.returncode:
                       print(r.stderr); fail = True
+              ids = re.findall(r'\bid="([^"]+)"', html)
+              for dup in sorted({x for x in ids if ids.count(x) > 1}):
+                  print(f"FAIL {page} -> duplicate id {dup}"); fail = True
               # every relative asset and page link must exist
               for href in re.findall(r'(?:href|src)="(?!https?:|data:|#)([^"]+)"', html):
-                  path = os.path.join("web", href.split("?")[0])
+                  path = os.path.join("web", href.split("?")[0].split("#")[0])
                   if not os.path.exists(path):
                       print(f"FAIL {page} -> missing {href}"); fail = True
           sys.exit(1 if fail else 0)

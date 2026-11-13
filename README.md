@@ -1,6 +1,9 @@
 # Agent Allowance
 
-Protocol-enforced spending limits for AI agents on NEAR.
+> Protocol-enforced spending limits for AI agents on NEAR. Assume the agent is
+> compromised; bound what it can do.
+
+[![CI](https://github.com/abdulrr25/Agent_Allowance/actions/workflows/ci.yml/badge.svg)](https://github.com/abdulrr25/Agent_Allowance/actions/workflows/ci.yml)
 
 An AI agent that holds a wallet key can be talked into giving the money away —
 prompt injection is unsolved. Agent Allowance assumes the agent is already
@@ -11,6 +14,26 @@ contract to pay, within limits the owner wrote as code.
 - **Contract:** [`agent-allowance.testnet`](https://testnet.nearblocks.io/address/agent-allowance.testnet), live on NEAR testnet
 - **Tracks:** AI Security & Defense · Agent Economy · Autonomous Business
 - **Stack:** Rust contract (near-sdk 5.30.1), static site, Python-stdlib tooling
+- **Built by:** [abdulrr25](https://github.com/abdulrr25)
+
+## How it compares
+
+| Approach | A compromised agent can | Runs unattended | Enforced by |
+|---|---|---|---|
+| Agent holds a full-access key | take everything in the account | yes | nothing |
+| Limits in the agent's prompt or code | take everything — the limit is text the attacker now controls | yes | the agent itself |
+| A human approves every payment | take nothing without a signature | no | the signers |
+| **Agent Allowance** | only make payments the policy already permits | yes | the NEAR protocol and a contract |
+
+## What is real and what is not
+
+| Real | Not |
+|---|---|
+| The contract, deployed and holding funds on NEAR testnet | Mainnet. Nothing here has been deployed there |
+| Every attack and payment: signed transactions against that contract | Real value. Testnet NEAR and testnet USDC.e are worth nothing |
+| The stablecoin: `usdc.fakes.testnet`, a public testnet token this project does not control | An AI model in the loop. Whoever holds the key plays the compromised agent, which is the stronger assumption |
+| The protocol refusals: returned by NEAR nodes, not by this code | An audit. The contract is unaudited |
+| The activity page: decoded from transaction receipts | `withdraw_ft` on the live build; it is in the contract and tested, and lands on the next deploy |
 
 ## How NEAR fits
 
@@ -32,8 +55,8 @@ the protocol.
 
 ## Try it: do X, see Y
 
-Steps 1–5 and 8 need only Python 3.8+, a browser, and outbound HTTPS to NEAR
-testnet RPC. Nothing to install, no wallet, no account. Steps 6–7 need Rust.
+Steps 1–5, 8 and 9 need only Python 3.8+, a browser, and outbound HTTPS to
+NEAR testnet RPC. Nothing to install, no wallet, no account. Steps 6–7 need Rust.
 
 | # | Do this | See this |
 |---|---|---|
@@ -44,7 +67,8 @@ testnet RPC. Nothing to install, no wallet, no account. Steps 6–7 need Rust.
 | 5 | Same page: pick **A legitimate payment**, send | `ALLOWED` — 0.005 NEAR paid to the allowlisted payee. All four pipeline stages pass. |
 | 6 | `cd contract && cargo test` | `36 passed; 0 failed`. No network needed. |
 | 7 | `cd integration-tests && cargo test` | `14 passed; 0 failed` against a real sandbox node (downloads the node binary on first run). |
-| 8 | `python3 scripts/test_nearlite.py` | `12 passed, 0 failed` — the signing code checked against RFC 8032 test vectors, offline. |
+| 8 | Open <http://127.0.0.1:8787/activity.html> | Your step-4 attempt at the top of the list, marked `Blocked`, with the reason and the text you typed. |
+| 9 | `python3 scripts/test_nearlite.py` | `16 passed, 0 failed` — the signing code checked against RFC 8032 test vectors, and the MCP server's protocol handling, offline. |
 
 Step 2 sends real testnet transactions. Its legitimate payment draws on a
 rolling daily cap of 0.1 NEAR; if other people have used that up, the script
@@ -243,19 +267,52 @@ The call returns `{allowed, reason}` and never panics on a policy refusal, so
 an agent can read why it was refused and report it rather than retry blindly.
 Setting up a new agent — create the account, add the restricted key, delete
 the full-access key, register a policy — is scripted end to end in
-`scripts/reproduce-demo.sh`.
+`scripts/reproduce-demo.sh`, and the site's **Use it** page generates the same
+commands for a policy you design.
+
+### From any MCP-capable agent
+
+`scripts/mcp_server.py` exposes the vault to an AI agent as two tools,
+`request_payment` and `get_policy`, over MCP's stdio transport. It uses the
+standard library only. The model can call the tools as often as it likes; the
+limits are enforced on-chain, not by the model or by this process.
+
+```json
+{
+  "mcpServers": {
+    "agent-allowance": {
+      "command": "python3",
+      "args": ["/path/to/Agent_Allowance/scripts/mcp_server.py"],
+      "env": {
+        "AGENT_ACCOUNT": "my-agent.testnet",
+        "AGENT_KEY": "ed25519:...",
+        "VAULT_ACCOUNT": "agent-allowance.testnet"
+      }
+    }
+  }
+}
+```
+
+A denied request comes back to the model as data, not as an exception:
+
+```json
+{"allowed": false, "stopped_by": "vault", "reason": "recipient_not_allowlisted",
+ "transaction": "D2PawYgQGye1mKhGx3mYZsoJiZ8LWPJueefqgfFwEdxp"}
+```
 
 ## The site
 
-Four static pages over one stylesheet and one client module — no build step,
+Six static pages over one stylesheet and one client module — no build step,
 no package manager, no framework.
 
 | Page | What it does |
 |---|---|
-| `index.html` | the problem, the two gates, live vault state, every agent's policy |
+| `index.html` | the problem, the two gates, a replay of recorded transactions, live vault state and every agent's policy |
 | `attack.html` | the published key and the attack console: nine attacks, each signed in the browser and traced through the two gates |
-| `proof.html` | five transactions replayed from their own chain events |
+| `activity.html` | every call the vault has received, newest first, decoded from each transaction's receipts |
+| `proof.html` | five transactions replayed from their own chain events, and how to verify the rest |
 | `flow.html` | the flow chart, then the same thing in plain words |
+| `docs.html` | design a policy, test a request against it, get the commands to deploy it, connect an agent; API reference |
 
 The attack console signs with the published key. That agent is capped at
 0.01 NEAR and 5 USDC.e per payment, to a single allowlisted address, so the
@@ -267,6 +324,11 @@ access-key violation is ever shown as the network refusing an attack.
 The contract exposes a single `dashboard()` view returning the whole page
 state in one call, because one request per field gets throttled by public
 endpoints and renders a half-loaded page.
+
+The activity page lists the vault's transactions through FastNEAR's public
+transaction API and decodes the events from their receipts. If that indexer is
+unreachable the page says so and links to the same history on NearBlocks;
+nothing else on the site depends on it.
 
 ## Tests
 
@@ -281,7 +343,7 @@ cd integration-tests && cargo test   # 14 sandbox tests — real NEAR node
 ```
 
 ```bash
-python3 scripts/test_nearlite.py     # 12 offline tests of the signing code
+python3 scripts/test_nearlite.py     # 16 offline tests of the Python tooling
 ```
 
 **Unit tests** cover policy logic and authorization: the prompt-injected drain,
@@ -315,8 +377,9 @@ first run and needs network access, and `cd contract && cargo test` should
 never depend on a download.
 
 **Client tests** check the standard-library Ed25519 implementation against the
-RFC 8032 test vectors, and the transaction encoding against the key and
-signature the chain already accepts.
+RFC 8032 test vectors, the transaction encoding against the key and signature
+the chain already accepts, and the MCP server's handshake, tool listing and
+error handling.
 
 CI runs formatting, `clippy -D warnings`, the unit tests and the wasm build on
 every push; `verify.py` against the live deployment; the client tests; and a
@@ -476,10 +539,11 @@ integration-tests/            14 sandbox tests covering the settlement path
 scripts/verify.py             read-only on-chain verification, 27 checks
 scripts/redteam.py            nine live attacks with the agent's real key
 scripts/nearlite.py           standard-library NEAR client: Ed25519, Borsh, RPC
-scripts/test_nearlite.py      offline tests for that client
+scripts/mcp_server.py         MCP server: the vault as two tools for any AI agent
+scripts/test_nearlite.py      offline tests for the client and the MCP server
 scripts/reproduce-demo.sh     recreate the deployment on testnet from scratch
 index.html                    redirect to web/, so the repository root can be hosted as-is
-web/                          four-page site: overview, attack, proof, flow
+web/                          six-page site: overview, attack, activity, proof, flow, guide
 web/assets/app.css            design system
 web/assets/app.js             shared chain reads, formatting, renderers
 .github/workflows/ci.yml      fmt, clippy, tests, wasm, on-chain verify, site checks
@@ -494,7 +558,8 @@ Built for NEAR HACKATHON, November 2026.
   work: [commits on `main`](https://github.com/abdulrr25/Agent_Allowance/commits/main).
 - **Libraries.** `near-sdk` 5.30.1 (contract). `near-workspaces` 0.24.0,
   `tokio`, `anyhow` and `serde_json` (sandbox tests only). `near-api-js` 4.0.3,
-  loaded from jsDelivr, for signing in the browser. The Python tooling uses
+  loaded from jsDelivr, for signing in the browser. Inter and JetBrains Mono,
+  loaded from Google Fonts. The Python tooling uses
   the standard library only. No template or boilerplate was used.
 - **Other chains.** No version of this exists on another chain.
 - **Network.** Testnet only. Nothing here has been deployed to mainnet.

@@ -139,7 +139,10 @@ const renderAgent = s => `<div class="glass pad">
   ${(s.tokens || []).map(t => assetBlock(esc(tokenName(t.token_id)), 6, t.policy, t.remaining_today)).join("")}
 </div>`;
 
-/** Paint vault stats and agent cards into whichever containers exist. */
+/** Paint vault stats and agent cards into whichever containers exist.
+ *  A failed refresh keeps the last good read on screen and says so in the
+ *  footer; only a failed first load replaces the placeholders with an error. */
+let dashboardLoaded = false;
 async function loadDashboard() {
   const stats = document.getElementById("stats");
   const agents = document.getElementById("agents");
@@ -159,11 +162,15 @@ async function loadDashboard() {
     if (agents) agents.innerHTML = d.agents.length
       ? d.agents.map(renderAgent).join("")
       : '<div class="glass pad"><span class="muted">No agents registered</span></div>';
+    dashboardLoaded = true;
     stamp();
     return d;
   } catch (e) {
-    if (stats) stats.innerHTML =
-      `<div class="glass pad"><span class="err">Could not reach NEAR RPC: ${esc(e.message)}</span></div>`;
+    if (dashboardLoaded) { stamp("could not reach RPC — showing the last read"); return null; }
+    const msg = `<div class="glass pad" style="grid-column:1/-1"><span class="err">Could not reach NEAR RPC: ${esc(e.message)}</span>
+      <p class="muted" style="margin-top:8px">This section reads live from the contract. Reload to try again.</p></div>`;
+    if (stats) stats.innerHTML = msg;
+    if (agents) agents.innerHTML = msg;
     stamp("could not reach RPC");
     return null;
   }

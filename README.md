@@ -65,7 +65,7 @@ NEAR testnet RPC. Nothing to install, no wallet, no account. Steps 6–7 need Ru
 | 3 | `cd web && python3 -m http.server 8787`, open <http://127.0.0.1:8787/attack.html>, pick **Just send the money**, press **Sign and send the attack** | `REFUSED BY THE NETWORK` — `InvalidAccessKeyError → RequiresFullAccess`. The pipeline stops at "NEAR network". |
 | 4 | Same page: pick **Prompt-injected payment**, type any instruction and any recipient, send | `BLOCKED BY THE VAULT` — `recipient_not_allowlisted`, with your text recorded on-chain and a link to the transaction. |
 | 5 | Same page: pick **A legitimate payment**, send | `ALLOWED` — 0.005 NEAR paid to the allowlisted payee. All four pipeline stages pass. |
-| 6 | `cd contract && cargo test` | `36 passed; 0 failed`. No network needed. |
+| 6 | `cd contract && cargo test` | `40 passed; 0 failed`. No network needed. |
 | 7 | `cd integration-tests && cargo test` | `14 passed; 0 failed` against a real sandbox node (downloads the node binary on first run). |
 | 8 | Open <http://127.0.0.1:8787/activity.html> | Your step-4 attempt at the top of the list, marked `Blocked`, with the reason and the text you typed. |
 | 9 | `python3 scripts/test_nearlite.py` | `16 passed, 0 failed` — the signing code checked against RFC 8032 test vectors, and the MCP server's protocol handling, offline. |
@@ -335,7 +335,7 @@ nothing else on the site depends on it.
 Three layers.
 
 ```bash
-cd contract && cargo test            # 36 unit tests — fast, no network
+cd contract && cargo test            # 40 unit tests — fast, no network
 ```
 
 ```bash
@@ -348,7 +348,9 @@ python3 scripts/test_nearlite.py     # 16 offline tests of the Python tooling
 
 **Unit tests** cover policy logic and authorization: the prompt-injected drain,
 daily-cap exhaustion, 24-hour window rollover, privilege-escalation attempts,
-owner-only token withdrawal, and input validation.
+owner-only token withdrawal, spending a token after the owner stopped accepting
+it, and input validation including the memo bound at each of the three entry
+points that enforce it. Every deny reason has a test.
 
 **Integration tests** cover what unit tests structurally cannot. A unit test
 cannot schedule a cross-contract transfer or run a callback, so the settlement
@@ -534,7 +536,7 @@ the owner has not opted into.
 ## Layout
 
 ```
-contract/src/lib.rs           the vault: policy, enforcement, events, 36 unit tests
+contract/src/lib.rs           the vault: policy, enforcement, events, 40 unit tests
 integration-tests/            14 sandbox tests covering the settlement path
 scripts/verify.py             read-only on-chain verification, 27 checks
 scripts/redteam.py            nine live attacks with the agent's real key

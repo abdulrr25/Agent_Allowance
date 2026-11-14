@@ -1526,6 +1526,57 @@ mod tests {
         let _ = c.withdraw_ft(token(), U128(1), attacker());
     }
 
+    /// The last DenyReason without a test. A token can be removed after a
+    /// policy was written for it: the policy survives, the acceptance does not,
+    /// and a spend must be refused rather than paying out of a balance the
+    /// owner has stopped accepting.
+    #[test]
+    fn token_spend_is_denied_once_the_token_is_removed() {
+        let mut c = setup_ft();
+        testing_env!(ctx(owner(), ONE_YOCTO, 0));
+        c.remove_token(token());
+
+        let r = spend_ft(&mut c, agent(), allowed_payee(), 5);
+        assert!(!r.allowed, "a removed token must not be spendable");
+        assert_eq!(r.reason, Some(DenyReason::TokenNotAccepted));
+        assert_eq!(
+            c.ft_balance(token()).0,
+            100,
+            "a refusal must not touch the held balance"
+        );
+    }
+
+    /// MAX_MEMO is enforced at three entry points. Each is asserted, because an
+    /// unbounded memo is written to an event the vault pays gas to emit.
+    #[test]
+    #[should_panic(expected = "memo too long")]
+    fn an_over_long_memo_is_rejected() {
+        let mut c = setup();
+        testing_env!(ctx(agent(), NearToken::from_yoctonear(0), 0));
+        let _ = c.request_spend(allowed_payee(), U128(1), Some("x".repeat(MAX_MEMO + 1)));
+    }
+
+    #[test]
+    #[should_panic(expected = "memo too long")]
+    fn an_over_long_memo_is_rejected_on_the_token_path() {
+        let mut c = setup_ft();
+        testing_env!(ctx(agent(), NearToken::from_yoctonear(0), 0));
+        let _ = c.request_spend_ft(
+            token(),
+            allowed_payee(),
+            U128(1),
+            Some("x".repeat(MAX_MEMO + 1)),
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "msg too long")]
+    fn an_over_long_deposit_message_is_rejected() {
+        let mut c = setup_ft();
+        testing_env!(ctx(token(), NearToken::from_yoctonear(0), 0));
+        let _ = c.ft_on_transfer(owner(), U128(1), "x".repeat(MAX_MEMO + 1));
+    }
+
     #[test]
     fn failed_ft_withdrawal_restores_held_balance() {
         let mut c = setup_ft();

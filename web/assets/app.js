@@ -318,7 +318,10 @@ const ago = ms => {
 
 /** Decode one indexed transaction into a feed row. */
 function activityRow(t) {
-  const tx = t.transaction, call = (tx.actions[0] || {}).FunctionCall;
+  const tx = t.transaction;
+  // A transaction may carry several actions; take the first function call,
+  // not blindly actions[0], or the row disappears from the feed.
+  const call = (tx.actions.find(a => a && a.FunctionCall) || {}).FunctionCall;
   if (!call) return null;
   const logs = [t.execution_outcome, ...(t.receipts || []).map(r => r.execution_outcome)]
     .filter(Boolean).flatMap(o => o.outcome.logs || []);
@@ -371,8 +374,11 @@ async function loadActivity(limit = 100) {
     full.push(...(part.transactions || []));
   }
   // The indexer can return a transaction more than once; keep the first.
-  const seen = new Set();
-  const rows = full.map(activityRow).filter(r => r && !seen.has(r.hash) && seen.add(r.hash));
+  const seen = new Set(), rows = [];
+  for (const t of full) {
+    const r = activityRow(t);
+    if (r && !seen.has(r.hash)) { seen.add(r.hash); rows.push(r); }
+  }
   return { total: list.txs_count, rows: rows.sort((a, b) => b.when - a.when) };
 }
 

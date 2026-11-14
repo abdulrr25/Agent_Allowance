@@ -11,7 +11,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;700&amp;display=swap">
-<link rel="stylesheet" href="assets/app.css?v=9">
+<link rel="stylesheet" href="assets/app.css?v=11">
 </head><body>
 <header class="nav"><div class="nav-in">
   <a class="brand" href="index.html"><span class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5c0 4.5-3 8.2-7 10-4-1.8-7-5.5-7-10V6l7-3z"/><path d="M9.2 12.2l2 2 3.8-4"/></svg></span>Agent Allowance</a>
@@ -166,7 +166,7 @@ print(near.events(result))   # spend_allowed, or spend_denied with a reason</pre
           <code>ft_balance</code> · <code>list_tokens</code></p>
         <h3>Why a request is denied</h3>
         <div class="tablewrap"><table><thead><tr><th>Reason</th><th>Meaning</th></tr></thead><tbody>
-          <tr><td><code>vault_paused</code></td><td>The owner has pulled the kill switch.</td></tr><tr><td><code>agent_disabled</code></td><td>This agent is switched off.</td></tr><tr><td><code>amount_zero</code></td><td>The request asked for nothing.</td></tr><tr><td><code>exceeds_per_tx_cap</code></td><td>More than one payment may move.</td></tr><tr><td><code>exceeds_daily_cap</code></td><td>More than is left in the rolling 24-hour window.</td></tr><tr><td><code>recipient_not_allowlisted</code></td><td>The recipient is not an address the owner chose.</td></tr><tr><td><code>insufficient_vault_balance</code></td><td>The vault does not hold that much.</td></tr><tr><td><code>token_not_accepted</code></td><td>The owner has not opted this token in.</td></tr>
+          <tr><td><code>vault_paused</code></td><td>The owner has pulled the kill switch.</td></tr><tr><td><code>agent_disabled</code></td><td>This agent is switched off.</td></tr><tr><td><code>amount_zero</code></td><td>The request asked for nothing.</td></tr><tr><td><code>exceeds_per_tx_cap</code></td><td>More than a single payment is allowed to move.</td></tr><tr><td><code>exceeds_daily_cap</code></td><td>More than is left in the agent’s rolling 24-hour window.</td></tr><tr><td><code>recipient_not_allowlisted</code></td><td>The recipient is not an address the owner chose.</td></tr><tr><td><code>insufficient_vault_balance</code></td><td>The vault does not hold that much.</td></tr><tr><td><code>token_not_accepted</code></td><td>The owner has not opted this token in.</td></tr>
         </tbody></table></div>
         <p style="margin-top:14px">Checks run in that order, and the first failure decides. Every
           decision is emitted as a NEP-297 event — <code>spend_allowed</code>,
@@ -225,10 +225,10 @@ print(near.events(result))   # spend_allowed, or spend_denied with a reason</pre
   <div class="legal">
     <span class="by">Built by <a href="https://github.com/abdulrr25" target="_blank" rel="noopener">abdulrr25</a>
       for NEAR HACKATHON · November 2026</span>
-    <span>NEAR testnet · unaudited · <span>Unaudited testnet build</span></span>
+    <span>NEAR testnet · unaudited · no live data on this page</span>
   </div>
 </div></footer>
-<script src="assets/app.js?v=8"></script>
+<script src="assets/app.js?v=9"></script>
 <script>
 const $ = id => document.getElementById(id);
 const B = { near: { dec: 24, unit: "NEAR", token: null },

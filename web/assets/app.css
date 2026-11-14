@@ -7,15 +7,21 @@
    reserved for verdicts. Amber marks the published key.
    =========================================================== */
 :root{
-  --bg:#07080c; --surface:#0e1016; --surface-2:#13161e; --inset:#0a0c11;
+  --bg:#07080c; --surface:#0e1016; --inset:#0a0c11;
   --line:rgba(255,255,255,.08); --line-2:rgba(255,255,255,.15);
   --text:#eef0f6; --dim:#a9afbf; --faint:#7d859a;
   --violet:#8b7cf6; --violet-2:#b0a5ff; --cyan:#38d5ee; --cyan-2:#86e6f6;
-  --allow:#34d399; --allow-2:#7ee8bf; --deny:#fb7185; --deny-2:#fda4af; --warn:#fbbf24;
-  --grad:linear-gradient(120deg,#8b7cf6 0%,#6c8cf7 50%,#38d5ee 100%);
+  --allow:#34d399; --allow-2:#7ee8bf; --deny-2:#fda4af; --warn:#fbbf24;
+  --grad:linear-gradient(120deg,var(--violet) 0%,#6c8cf7 50%,var(--cyan) 100%);
   --sans:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;
   --mono:"JetBrains Mono",ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
   --r:16px; --rs:10px; --w:1160px;
+  /* Vertical rhythm. Every section uses the same padding, so the gap between
+     any two sections is exactly 2x --s-sec and never varies by page. */
+  --s-sec:48px;      /* section padding, top and bottom */
+  --s-head:36px;     /* a section heading block to the content under it */
+  --s-gap:16px;      /* between cards in a grid */
+  --s-card:26px;     /* inside a card */
   --card-shadow:inset 0 1px 0 rgba(255,255,255,.045),0 24px 48px -32px rgba(0,0,0,.9);
 }
 *,*::before,*::after{box-sizing:border-box}
@@ -91,9 +97,9 @@ code,kbd{font-family:var(--mono);font-size:.86em;background:rgba(255,255,255,.06
   border:1px solid var(--line);padding:1px 6px;border-radius:6px;color:var(--violet-2)}
 
 /* ---------- sections ---------- */
-section{padding:44px 0}
-.section-lg{padding:72px 0}
-.head{max-width:720px;margin-bottom:36px}
+section{padding:var(--s-sec) 0}
+.section-lg{padding:var(--s-sec) 0}
+.head{max-width:720px;margin-bottom:var(--s-head)}
 .head h2+p{margin-top:14px}
 .head.center{margin-left:auto;margin-right:auto;text-align:center}
 .head.center .lede{margin-left:auto;margin-right:auto}
@@ -131,8 +137,8 @@ section{padding:44px 0}
 .glass,.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);
   box-shadow:var(--card-shadow);transition:border-color .2s}
 .glass:hover,.card:hover{border-color:var(--line-2)}
-.pad{padding:26px}
-.grid{display:grid;gap:16px}
+.pad{padding:var(--s-card)}
+.grid{display:grid;gap:var(--s-gap)}
 .g2{grid-template-columns:repeat(2,minmax(0,1fr))}
 .g3{grid-template-columns:repeat(3,minmax(0,1fr))}
 .g4{grid-template-columns:repeat(4,minmax(0,1fr))}
@@ -182,10 +188,12 @@ input:focus,textarea:focus,select:focus{outline:none;border-color:rgba(139,124,2
   box-shadow:0 0 0 3px rgba(139,124,246,.16)}
 .field{margin-bottom:16px}
 .two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px}
-.seg{display:inline-flex;background:var(--inset);border:1px solid var(--line);
+.seg{display:inline-flex;max-width:100%;overflow-x:auto;scrollbar-width:none;
+  background:var(--inset);border:1px solid var(--line);
   border-radius:var(--rs);padding:3px;gap:3px;margin-bottom:18px}
+.seg::-webkit-scrollbar{display:none}
 .seg button{background:none;border:0;color:var(--dim);font-size:13.5px;font-weight:500;
-  padding:7px 16px;border-radius:7px;cursor:pointer;transition:.15s}
+  padding:7px 16px;border-radius:7px;cursor:pointer;transition:.15s;white-space:nowrap}
 .seg button:hover{color:var(--text)}
 .seg button.sel{background:rgba(255,255,255,.1);color:var(--text);
   box-shadow:inset 0 0 0 1px var(--line-2)}
@@ -366,7 +374,7 @@ tr.us td{background:rgba(139,124,246,.07)}
 .toc a{padding:7px 12px;border-radius:8px;font-size:14px;color:var(--dim);
   border-left:2px solid transparent}
 .toc a:hover{color:var(--text);text-decoration:none;background:rgba(255,255,255,.04)}
-.doc section{padding:0 0 56px}
+.doc section{padding:0 0 var(--s-sec)}
 .doc h2{font-size:26px;margin-bottom:12px}
 .doc h3{margin:28px 0 10px}
 .doc p{color:var(--dim);font-size:15.5px;line-height:1.75;margin-bottom:14px;max-width:72ch}
@@ -396,15 +404,17 @@ tr.us td{background:rgba(139,124,246,.07)}
 .eg b{color:var(--cyan-2);font-weight:600}
 
 /* ---------- call to action ---------- */
-.cta{text-align:center;padding:56px 28px;border-radius:20px;border:1px solid var(--line-2);
+.cta{text-align:center;padding:52px 28px;border-radius:20px;border:1px solid var(--line-2);
   background:
     radial-gradient(520px 220px at 50% 0%,rgba(139,124,246,.2),transparent 70%),var(--surface)}
 .cta p{margin:14px auto 0}
 .cta .btn-row{justify-content:center;margin-top:28px}
 
 /* ---------- footer ---------- */
-footer{margin-top:72px;border-top:1px solid var(--line);background:rgba(255,255,255,.012)}
-.foot{display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr;gap:40px;padding:48px 0 36px}
+footer{margin-top:calc(var(--s-sec) / 2);border-top:1px solid var(--line);
+  background:rgba(255,255,255,.012)}
+.foot{display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr;gap:40px;
+  padding:calc(var(--s-sec) - 4px) 0 32px}
 .foot .fh{font-family:var(--mono);font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;
   color:var(--faint);font-weight:500;margin-bottom:14px}
 .foot a{display:block;color:var(--dim);font-size:14.5px;padding:4px 0}
@@ -436,8 +446,8 @@ footer{margin-top:72px;border-top:1px solid var(--line);background:rgba(255,255,
 @media(max-width:720px){
   .shell{padding:0 18px}
   .nav-in{padding:0 18px;gap:12px}
-  section{padding:32px 0}.section-lg{padding:52px 0}
-  .hero{padding:48px 0 24px}.hero.tight{padding:36px 0 4px}
+  :root{--s-sec:32px;--s-head:26px;--s-gap:12px;--s-card:20px}
+  .hero{padding:44px 0 20px}.hero.tight{padding:32px 0 4px}
   .g2,.g3,#agents{grid-template-columns:minmax(0,1fr)}
   .two{grid-template-columns:minmax(0,1fr)}
   .pipe{grid-template-columns:minmax(0,1fr)}
@@ -449,8 +459,8 @@ footer{margin-top:72px;border-top:1px solid var(--line);background:rgba(255,255,
   .item{grid-template-columns:minmax(0,1fr);gap:10px}
   .item .when{text-align:left}
   .item .when a{display:inline;margin-left:10px}
-  .pad{padding:20px}
-  .cta{padding:40px 20px}
+  .cta{padding:38px 20px}
+  .foot{gap:28px}
   .btn{height:44px}
   .nav-cta .btn{display:none}
 }
